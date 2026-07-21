@@ -5,6 +5,7 @@ import type {
   LevelId,
   QuestionAttempt,
   QuestionSkill,
+  SessionLength,
 } from "@/types/game"
 
 const randomId = () => crypto.randomUUID()
@@ -23,11 +24,20 @@ function answerChoices(answer: number, min: number, max: number) {
 
 export function answerChoicesForQuestion(question: GameQuestion) {
   if (question.skill === "bond-complete") return answerChoices(question.expectedAnswer, 6, 14)
-  if (question.skill === "bond-missing-second" || question.skill === "teen-missing-ones") {
+  if (
+    question.skill === "bond-missing-second"
+    || question.skill === "teen-missing-ones"
+    || question.skill === "bridge-missing-addend"
+  ) {
     return answerChoices(question.expectedAnswer, 1, 9)
   }
   return answerChoices(question.expectedAnswer, 11, 19)
 }
+
+const bridgePairs = [
+  [8, 3], [8, 4], [8, 5], [7, 4], [7, 5], [7, 6], [6, 5],
+  [6, 6], [6, 7], [9, 2], [9, 3], [9, 4], [9, 5],
+] as const
 
 function chooseAnimal(recent: AnimalType[]) {
   const lastTwo = recent.slice(-2)
@@ -53,12 +63,17 @@ function isSecure(attempts: QuestionAttempt[], key: string) {
   return itemAttempts.length >= 5 && itemAttempts.slice(-5).filter((attempt) => attempt.correctOnFirstAttempt).length >= 4
 }
 
-function chooseCandidate<T extends { key: string }>(
+function chooseCandidate<T extends { key: string; boost?: number }>(
   candidates: T[],
   attempts: QuestionAttempt[],
   mode: "targeted" | "review" | "confidence",
+  recentItemKeys: string[],
 ) {
-  const scored = candidates.map((candidate) => {
+  const lastTwo = recentItemKeys.slice(-2)
+  const blockedKey = lastTwo.length === 2 && lastTwo[0] === lastTwo[1] ? lastTwo[0] : null
+  const eligible = blockedKey ? candidates.filter((candidate) => candidate.key !== blockedKey) : candidates
+  const pool = eligible.length > 0 ? eligible : candidates
+  const scored = pool.map((candidate) => {
     const history = attemptsFor(attempts, candidate.key)
     const latest = history.at(-1)
     let score = 1
@@ -71,18 +86,19 @@ function chooseCandidate<T extends { key: string }>(
     } else {
       score = latest?.correctOnFirstAttempt ? 6 : history.length === 0 ? 2 : 0
     }
-    return { candidate, score: score + Math.random() }
+    return { candidate, score: score + (candidate.boost ?? 0) + Math.random() }
   })
   return scored.sort((a, b) => b.score - a.score)[0].candidate
 }
 
-function sessionMode(questionNumber: number): "targeted" | "review" | "confidence" {
-  if (questionNumber === 10) return "confidence"
-  if (questionNumber === 4 || questionNumber === 8) return "review"
+function sessionMode(questionNumber: number, totalQuestions: SessionLength): "targeted" | "review" | "confidence" {
+  const positionInBlock = ((questionNumber - 1) % 10) + 1
+  if (questionNumber === totalQuestions || positionInBlock === 10) return "confidence"
+  if (positionInBlock === 4 || positionInBlock === 8) return "review"
   return "targeted"
 }
 
-function levelOneQuestion(attempts: QuestionAttempt[], animal: AnimalType, questionNumber: number): GameQuestion {
+function levelOneQuestion(attempts: QuestionAttempt[], animal: AnimalType, questionNumber: number, totalQuestions: SessionLength, recentItemKeys: string[]): GameQuestion {
   const candidates: Array<{ key: string; first: number; second: number; skill: QuestionSkill }> = []
   for (let first = 1; first <= 9; first += 1) {
     const second = 10 - first
@@ -92,7 +108,7 @@ function levelOneQuestion(attempts: QuestionAttempt[], animal: AnimalType, quest
       candidates.push({ key: itemKey("bond-missing-second", first, second), first, second, skill: "bond-missing-second" })
     }
   }
-  const selected = chooseCandidate(candidates, attempts, sessionMode(questionNumber))
+  const selected = chooseCandidate(candidates, attempts, sessionMode(questionNumber, totalQuestions), recentItemKeys)
   const missing = selected.skill === "bond-missing-second"
   return {
     id: randomId(), level: 1, skill: selected.skill, animal,
@@ -107,23 +123,20 @@ function levelOneQuestion(attempts: QuestionAttempt[], animal: AnimalType, quest
   }
 }
 
-function levelTwoQuestion(attempts: QuestionAttempt[], animal: AnimalType, questionNumber: number): GameQuestion {
-  const candidates: Array<{ key: string; teen: number; ones: number; skill: QuestionSkill }> = []
+function levelTwoQuestion(attempts: QuestionAttempt[], animal: AnimalType, questionNumber: number, totalQuestions: SessionLength, recentItemKeys: string[]): GameQuestion {
+  const candidates: Array<{ key: string; teen: number; ones: number; skill: QuestionSkill; boost?: number }> = []
+  const preferMissingForm = questionNumber % 2 === 0
   for (let teen = 11; teen <= 19; teen += 1) {
     const ones = teen - 10
     const countKey = itemKey("teen-count-total", 10, ones)
-    candidates.push({ key: countKey, teen, ones, skill: "teen-count-total" })
+    candidates.push({ key: countKey, teen, ones, skill: "teen-count-total", boost: preferMissingForm ? 0 : 1.5 })
+    candidates.push({ key: itemKey("teen-missing-ones", 10, ones), teen, ones, skill: "teen-missing-ones", boost: preferMissingForm ? 1.5 : 0 })
     if (firstAttemptSuccess(attempts, countKey)) {
       candidates.push({ key: itemKey("teen-add-ten", 10, ones), teen, ones, skill: "teen-add-ten" })
       candidates.push({ key: itemKey("teen-identify-number", 10, ones), teen, ones, skill: "teen-identify-number" })
     }
-    const forwardUnlocked = firstAttemptSuccess(attempts, itemKey("teen-add-ten", 10, ones))
-      || firstAttemptSuccess(attempts, itemKey("teen-identify-number", 10, ones))
-    if (forwardUnlocked) {
-      candidates.push({ key: itemKey("teen-missing-ones", 10, ones), teen, ones, skill: "teen-missing-ones" })
-    }
   }
-  const selected = chooseCandidate(candidates, attempts, sessionMode(questionNumber))
+  const selected = chooseCandidate(candidates, attempts, sessionMode(questionNumber, totalQuestions), recentItemKeys)
   const missing = selected.skill === "teen-missing-ones"
   const count = selected.skill === "teen-count-total"
   return {
@@ -139,14 +152,67 @@ function levelTwoQuestion(attempts: QuestionAttempt[], animal: AnimalType, quest
   }
 }
 
+function levelThreeQuestion(attempts: QuestionAttempt[], animal: AnimalType, questionNumber: number, totalQuestions: SessionLength, recentItemKeys: string[]): GameQuestion {
+  const candidates: Array<{ key: string; first: number; second: number; skill: QuestionSkill; boost?: number }> = []
+
+  for (const [first, second] of bridgePairs) {
+    const makeKey = itemKey("bridge-make-ten", first, second)
+    candidates.push({ key: makeKey, first, second, skill: "bridge-make-ten" })
+
+    const makeTenKnown = firstAttemptSuccess(attempts, makeKey)
+    if (makeTenKnown) {
+      const splitKey = itemKey("bridge-split", first, second)
+      const splitKnown = firstAttemptSuccess(attempts, splitKey)
+      candidates.push({ key: splitKey, first, second, skill: "bridge-split", boost: splitKnown ? 0.5 : 2 })
+      if (splitKnown) {
+        const totalKey = itemKey("bridge-total", first, second)
+        candidates.push({
+          key: totalKey,
+          first,
+          second,
+          skill: "bridge-total",
+          boost: firstAttemptSuccess(attempts, totalKey) ? 0.5 : 2.5,
+        })
+      }
+    }
+
+  }
+
+  const selected = chooseCandidate(candidates, attempts, sessionMode(questionNumber, totalQuestions), recentItemKeys)
+  const total = selected.first + selected.second
+  const isMakeTen = selected.skill === "bridge-make-ten"
+  const isSplit = selected.skill === "bridge-split"
+
+  return {
+    id: randomId(), level: 3, skill: selected.skill, animal,
+    prompt: isMakeTen
+      ? "Move animals to fill the ten-frame."
+      : isSplit
+        ? `${selected.first} needs how many more to make 10?`
+        : "Bridge through 10 to find the total.",
+    equation: isMakeTen
+      ? `${selected.first} + ${selected.second}`
+      : isSplit
+        ? `${selected.first} + ? = 10`
+        : `${selected.first} + ${selected.second} = ?`,
+    first: selected.first,
+    second: selected.second,
+    expectedAnswer: total,
+    answerChoices: answerChoices(total, 11, 19),
+    visualMode: isMakeTen || isSplit ? "bridge" : "equation-only",
+  }
+}
+
 export function generateQuestion(
   level: LevelId,
   attempts: QuestionAttempt[],
   recentAnimals: AnimalType[],
   questionNumber: number,
+  totalQuestions: SessionLength,
+  recentItemKeys: string[],
 ) {
   const animal = chooseAnimal(recentAnimals)
-  return level === 1
-    ? levelOneQuestion(attempts, animal, questionNumber)
-    : levelTwoQuestion(attempts, animal, questionNumber)
+  if (level === 1) return levelOneQuestion(attempts, animal, questionNumber, totalQuestions, recentItemKeys)
+  if (level === 2) return levelTwoQuestion(attempts, animal, questionNumber, totalQuestions, recentItemKeys)
+  return levelThreeQuestion(attempts, animal, questionNumber, totalQuestions, recentItemKeys)
 }

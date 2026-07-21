@@ -6,10 +6,11 @@ Build a small, browser-based maths game named **Kararehe Math** for a Year 2 chi
 
 “Kararehe” means animal. The interface is written in English, while number names and animal names are shown in English and te reo Māori together. A persisted setting controls which language is presented first and with greater visual emphasis.
 
-The MVP teaches two foundational skills:
+The game teaches three connected foundational skills:
 
 1. **Number bonds to 10**
 2. **Understanding teen numbers as one ten plus extra ones**
+3. **Bridging through 10 to solve addition problems**
 
 The game should be visual, calm, encouraging, and usable on both desktop and tablet. Questions use randomly selected animals:
 
@@ -133,6 +134,7 @@ Level buttons:
 ```text
 Level 1: Make 10
 Level 2: Teen Numbers
+Level 3: Bridge through 10
 ```
 
 Both levels remain unlocked in the MVP. Adaptive progression occurs within the level selected by the child; selecting a level starts a level-specific session.
@@ -157,7 +159,7 @@ For every question:
 5. Provide immediate visual feedback.
 6. If incorrect, show a teaching animation or visual hint.
 7. Continue to the next question.
-8. Finish after exactly 10 questions.
+8. Finish after the selected session length: 10, 20, or 30 questions.
 
 Do not display a countdown timer or end a session based on elapsed time.
 
@@ -893,6 +895,8 @@ The grid contains every ones value from 1 through 9:
 
 Keep positions stable and ascending from left to right, then top to bottom. This makes the grid quick to scan and reinforces numerical order. All nine values stay within the concept currently being practised.
 
+For the missing-ones form, loose animal counters remain visible and use the same visual scale as counters in the full ten-frame, but their numeric and bilingual count label is hidden so it does not reveal the answer.
+
 ### Level 2 incorrect-answer behaviour
 
 Suppose the question is:
@@ -961,7 +965,7 @@ Show animals
 
 button.
 
-#### Phase 4: Missing ones
+#### Missing ones
 
 Show:
 
@@ -969,14 +973,13 @@ Show:
 10 + ? = 14
 ```
 
-This phase is particularly important because missing-number equations are harder for the child.
+This form is particularly important and appears alongside complete equations rather than being held back as a late phase.
 
 For each teen number, unlock the formats gradually:
 
-1. Begin by counting a visible ten-group and loose ones.
-2. After one first-attempt success, unlock forward `10 + n` equation and identification forms.
-3. After one first-attempt success in a complete form, unlock the missing-ones `10 + ? = teen` form.
-4. Keep earlier formats available for targeted practice and review.
+1. Mix visible `10 + n = teen` and missing-ones `10 + ? = teen` questions from the beginning.
+2. After one first-attempt success on a visible count, also unlock forward-equation and identification variants for that teen number.
+3. Keep all unlocked formats available for targeted practice and review.
 
 Track mastery independently for each teen number and question format, using the same five-attempt/four-first-attempt-success rule as Level 1.
 
@@ -1016,17 +1019,17 @@ Do not introduce bridging questions such as:
 6 + ? = 15
 ```
 
-in the initial two-level MVP.
+in Levels 1 and 2.
 
-Those should become a later Level 3 after number bonds and teen-number structure are more fluent.
+Those are taught explicitly in Level 3 after number bonds and teen-number structure are more fluent.
 
 ---
 
 ## 9. Session design
 
-A session contains exactly ten questions from the selected level.
+A session contains 10, 20, or 30 questions from the selected level. A compact dropdown in the top-right header selects the length for new sessions; 10 is the default. An active session keeps the length it started with even if the preference changes.
 
-Use this as a soft target rather than a rigid quota:
+Use this as a soft target per block of ten questions rather than a rigid quota:
 
 ```text
 7 targeted questions
@@ -1040,11 +1043,11 @@ Only one session may be active at a time. Persist its session ID, selected level
 
 Returning home pauses the active session and presents a prominent **Resume** action. Starting another level while a session is paused requires confirmation; the old session is marked incomplete, while all completed attempts remain recorded.
 
-At the end, show:
+At the end, use the selected length in the completion message:
 
 ```text
 Great work!
-You helped 10 groups of animals.
+You helped 20 groups of animals.
 ```
 
 Display child-friendly progress without grades:
@@ -1108,7 +1111,7 @@ interface QuestionAttempt {
   id: string;
   timestamp: string;
   sessionId: string;
-  level: 1 | 2;
+  level: 1 | 2 | 3;
   skill:
     | "bond-complete"
     | "bond-missing-second"
@@ -1137,6 +1140,7 @@ interface StoredGameData {
   appVersion: string;
   settings: {
     languagePriority: LanguagePriority;
+    sessionLength: 10 | 20 | 30;
     reducedMotionOverride?: boolean;
   };
   sessions: GameSession[];
@@ -1256,7 +1260,7 @@ src/
 ## 12. Core TypeScript types
 
 ```ts
-type LevelId = 1 | 2;
+type LevelId = 1 | 2 | 3;
 
 type QuestionSkill =
   | "bond-complete"
@@ -1264,7 +1268,11 @@ type QuestionSkill =
   | "teen-count-total"
   | "teen-add-ten"
   | "teen-missing-ones"
-  | "teen-identify-number";
+  | "teen-identify-number"
+  | "bridge-make-ten"
+  | "bridge-split"
+  | "bridge-total"
+  | "bridge-missing-addend";
 
 interface AnswerChoice {
   value: number;
@@ -1418,8 +1426,9 @@ Audio, sound effects, mute controls, and spoken prompts are out of scope for the
 - The game runs entirely in the browser.
 - It works without a backend.
 - Progress persists after refreshing the page.
-- The game presents ten-question sessions.
-- Both levels are always unlocked and each session remains within the selected level.
+- The game presents sessions of 10, 20, or 30 questions.
+- The session-length dropdown offers 10, 20, and 30 questions and applies to new sessions.
+- All three levels are always unlocked and each session remains within the selected level.
 - The MVP stores progress for one learner per browser/device.
 - Each question randomly uses turtles, whales, tigers, cats, dogs, or penguins.
 - The same animal does not appear more than twice in succession.
@@ -1428,12 +1437,14 @@ Audio, sound effects, mute controls, and spoken prompts are out of scope for the
 - shadcn/ui is used for general interface controls and dialogs.
 - Emoji are used for the initial animal artwork behind a replaceable rendering layer.
 - Animal and number names are always shown in English and te reo Māori.
+- Within each bilingual label, the priority language is stacked above the secondary language. Number groups remain centred beneath the equation with clear space between separate values. Animal names use the same vertical treatment and typography for both languages, with the secondary language distinguished only by its muted colour and with extra horizontal breathing room inside sentence prompts.
 - A persisted setting controls which language is shown first and emphasised; English is the initial default.
 - General interface, navigation, feedback, Parent view, and accessibility instructions remain English.
 - Progress is stored as one versioned JSON blob in `localStorage`.
 - Progress can be exported to a JSON file.
 - Resetting progress requires confirmation and preserves device settings.
 - An interrupted session resumes at the same question and state.
+- After a correct answer is selected, the same answer button gains a white right-facing caret and can be selected again to continue; the main Next button remains available.
 
 ### Level 1
 
@@ -1451,6 +1462,18 @@ Audio, sound effects, mute controls, and spoken prompts are out of scope for the
 - Generates `10 + ? = teen number` questions.
 - Shows a visual explanation after an incorrect answer.
 - Performance is recorded separately for each teen number and question type.
+
+### Level 3
+
+- Generates crossing-ten addition problems from the Level 3 question bank.
+- Lets the child tap or drag animals into a partially filled ten-frame.
+- Requires the child to identify the partition and then choose the final answer within every Level 3 question.
+- Keeps the original addition equation visible while the partition is presented as a subordinate strategy step.
+- Promotes the bridge transformation to the central teaching visual, reveals its reasoning lines progressively, and withholds the final result until the child answers.
+- Separately records making ten, partitioning the second addend, and finding the total.
+- Shows the complete bridge transformation after an answer.
+- Uses complete-addend equations only, such as `6 + 5 = ?`; missing-addend bridging is deferred.
+- Records the three active Level 3 skills independently and reports bridging and partitioning mastery.
 
 ### Parent view
 
@@ -1477,7 +1500,6 @@ Do not include these in the first MVP:
 - Complex avatars
 - Open-ended world exploration
 - Timed pressure
-- Bridging through ten
 - Subtraction
 - Questions above 20
 - Artificial intelligence question generation
@@ -1489,9 +1511,9 @@ Do not include these in the first MVP:
 
 ---
 
-## 18. Later Level 3 direction
+## 18. Level 3: Bridging through ten
 
-The next level should teach bridging through ten.
+Level 3 teaches bridging through ten and is implemented according to [`level3-spec.md`](level3-spec.md).
 
 Example:
 
@@ -1507,7 +1529,7 @@ Transform visually into:
 15
 ```
 
-A suitable interaction would let the child move four animals from the group of nine into the partially completed ten-frame.
+The child can tap or drag four animals from the group of nine into the partially completed ten-frame.
 
 Missing-addend questions such as:
 
@@ -1515,10 +1537,10 @@ Missing-addend questions such as:
 6 + ? = 15
 ```
 
-should only be introduced after:
+are deferred from the current Level 3 build. They may be introduced later after:
 
 - Bonds to 10 are reasonably fluent
 - Teen numbers are understood as `10 + ones`
 - The child can visually bridge through 10
 
-The MVP should retain an extensible skill model so this third level can be added without rewriting the underlying progress system.
+Level 3 uses the shared question, session, and attempt model while storing its strategy skills separately from Levels 1 and 2.

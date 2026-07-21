@@ -1,6 +1,7 @@
-export type LevelId = 1 | 2
+export type LevelId = 1 | 2 | 3
 
 export type LanguagePriority = "english-first" | "maori-first"
+export type SessionLength = 10 | 20 | 30
 
 export type AnimalType =
   | "turtle"
@@ -17,6 +18,10 @@ export type QuestionSkill =
   | "teen-add-ten"
   | "teen-missing-ones"
   | "teen-identify-number"
+  | "bridge-make-ten"
+  | "bridge-split"
+  | "bridge-total"
+  | "bridge-missing-addend"
 
 export interface AnswerChoice {
   value: number
@@ -34,7 +39,7 @@ export interface GameQuestion {
   second: number
   expectedAnswer: number
   answerChoices: AnswerChoice[]
-  visualMode: "ten-frame" | "full-ten-plus-ones"
+  visualMode: "ten-frame" | "full-ten-plus-ones" | "bridge" | "equation-only"
 }
 
 export interface QuestionAttempt {
@@ -48,6 +53,9 @@ export interface QuestionAttempt {
   operands: number[]
   expectedAnswer: number
   submittedAnswers: number[]
+  partitionSubmittedAnswers?: number[]
+  partitionCorrectOnFirstAttempt?: boolean
+  sumCorrectOnFirstAttempt?: boolean
   correctOnFirstAttempt: boolean
   hintsUsed: number
   responseMs: number
@@ -60,6 +68,7 @@ export interface GameSession {
   endedAt: string
   status: "complete" | "incomplete"
   questionsCompleted: number
+  totalQuestions: SessionLength
 }
 
 export type FeedbackState = "answering" | "incorrect" | "revealed" | "correct"
@@ -72,8 +81,12 @@ export interface ActiveSession {
   questionStartedAt: string
   answeredAt: string | null
   questionsCompleted: number
+  totalQuestions: SessionLength
   recentAnimalIds: AnimalType[]
+  recentItemKeys: string[]
   submittedAnswers: number[]
+  bridgeStage?: "partition" | "sum"
+  partitionSubmittedAnswers?: number[]
   hintsUsed: number
   feedbackState: FeedbackState
   selectedAnswer: number | null
@@ -84,6 +97,7 @@ export interface StoredGameData {
   appVersion: string
   settings: {
     languagePriority: LanguagePriority
+    sessionLength: SessionLength
   }
   sessions: GameSession[]
   attempts: QuestionAttempt[]

@@ -1,12 +1,12 @@
 import type { StoredGameData } from "@/types/game"
-import { answerChoicesForQuestion } from "@/game/questionGenerator"
+import { answerChoicesForQuestion, itemKey } from "@/game/questionGenerator"
 
 export const STORAGE_KEY = "kararehe-math:data"
 
 export const initialData: StoredGameData = {
   schemaVersion: 1,
   appVersion: "0.1.0",
-  settings: { languagePriority: "english-first" },
+  settings: { languagePriority: "english-first", sessionLength: 10 },
   sessions: [],
   attempts: [],
   activeSession: null,
@@ -27,7 +27,34 @@ export function loadData(): StoredGameData {
     if (!raw) return initialData
     const parsed: unknown = JSON.parse(raw)
     if (!isStoredGameData(parsed)) return initialData
+    parsed.settings.sessionLength ??= 10
     if (parsed.activeSession) {
+      parsed.activeSession.totalQuestions ??= 10
+      parsed.activeSession.recentItemKeys ??= [itemKey(
+        parsed.activeSession.currentQuestion.skill,
+        parsed.activeSession.currentQuestion.first,
+        parsed.activeSession.currentQuestion.second,
+      )]
+      if (parsed.activeSession.level === 3) {
+        const question = parsed.activeSession.currentQuestion
+        if (question.skill === "bridge-missing-addend") {
+          question.skill = "bridge-total"
+          question.prompt = "Bridge through 10 to find the total."
+          question.equation = `${question.first} + ${question.second} = ?`
+          question.visualMode = "equation-only"
+          parsed.activeSession.submittedAnswers = []
+          parsed.activeSession.selectedAnswer = null
+          parsed.activeSession.feedbackState = "answering"
+          parsed.activeSession.answeredAt = null
+          parsed.activeSession.recentItemKeys = [
+            ...parsed.activeSession.recentItemKeys.slice(0, -1),
+            itemKey(question.skill, question.first, question.second),
+          ]
+        }
+        question.expectedAnswer = question.first + question.second
+        parsed.activeSession.bridgeStage ??= "partition"
+        parsed.activeSession.partitionSubmittedAnswers ??= []
+      }
       parsed.activeSession.currentQuestion.answerChoices = answerChoicesForQuestion(parsed.activeSession.currentQuestion)
       if (parsed.activeSession.currentQuestion.skill === "teen-missing-ones") {
         const question = parsed.activeSession.currentQuestion
