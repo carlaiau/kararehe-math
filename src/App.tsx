@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, BarChart3, Download, Home, Leaf, Play, RotateCcw, Sparkles } from "lucide-react"
+import { ArrowLeft, BarChart3, Code2, Download, ExternalLink, Home, Info, Leaf, Play, RotateCcw, Sparkles } from "lucide-react"
 import { BilingualTerm } from "@/components/BilingualTerm"
 import { LanguagePriorityControl } from "@/components/LanguagePriorityControl"
 import { SessionLengthControl } from "@/components/SessionLengthControl"
@@ -52,6 +52,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>("home")
   const [pendingLevel, setPendingLevel] = useState<LevelId | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const [lastCompletedSessionId, setLastCompletedSessionId] = useState<string | null>(null)
 
   useEffect(() => saveData(data), [data])
@@ -222,6 +223,9 @@ function App() {
           <div className="header-controls">
             <SessionLengthControl value={data.settings.sessionLength} onChange={setSessionLength} />
             <LanguagePriorityControl value={languagePriority} onChange={setLanguagePriority} />
+            <Button variant="ghost" size="icon" onClick={() => setAboutOpen(true)} aria-label="About Kararehe Math" title="About Kararehe Math">
+              <Info className="size-5" />
+            </Button>
           </div>
         </header>
       )}
@@ -259,6 +263,27 @@ function App() {
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setConfirmReset(false)}>Cancel</Button>
             <Button variant="danger" onClick={resetProgress}>Delete progress</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
+        <DialogContent>
+          <DialogTitle>About</DialogTitle>
+          <DialogDescription>A small, open-source maths assistant game made by Frankie and <a className="font-bold text-primary underline decoration-primary/35 underline-offset-4 hover:decoration-primary" href="https://www.carlaiau.com" target="_blank" rel="noreferrer">
+            Carl</a> Aiau 
+          </DialogDescription>
+          <div className="mt-6 space-y-4 text-foreground">
+            
+            <a className="flex items-center gap-3 rounded-2xl border-2 border-border bg-muted/45 p-4 font-bold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/35" href="https://github.com/carlaiau/kararehe-math" target="_blank" rel="noreferrer">
+              <Code2 className="size-5 shrink-0" aria-hidden="true" />
+              <span className="flex-1">View and contribute to the open-source code on GitHub</span>
+              <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </a>
+            <div className="rounded-2xl border-2 border-secondary/45 bg-secondary/12 p-4">
+              <strong>Educational note</strong>
+              <p className="mt-1 text-muted-foreground">I'm not an educator. This is a personal project for practising maths at home and should not be treated as professional educational advice. Contributions welcome.</p>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -321,7 +346,7 @@ function LevelCard({ level, title, subtitle, emoji, description, onClick }: { le
       </CardHeader>
       <CardContent className="level-card-content">
         <p className="level-card-description leading-relaxed text-muted-foreground">{description}</p>
-        <Button size="lg" className="level-card-action w-full" onClick={onClick}>Start <Play className="size-5 fill-current" /></Button>
+        <Button size="lg" className="level-card-action w-full" onClick={onClick} aria-label={`Start Level ${level}`}>Start <Play className="size-5 fill-current" /></Button>
       </CardContent>
     </Card>
   )
