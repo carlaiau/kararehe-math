@@ -213,16 +213,18 @@ function App() {
 
   return (
     <div className="min-h-svh">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-8 sm:py-6">
-        <button className="brand" onClick={() => setScreen("home")} aria-label="Kararehe Math home">
-          <span className="brand-mark"><Leaf className="size-5" /></span>
-          <span>Kararehe Math</span>
-        </button>
-        <div className="header-controls">
-          <SessionLengthControl value={data.settings.sessionLength} onChange={setSessionLength} />
-          <LanguagePriorityControl value={languagePriority} onChange={setLanguagePriority} />
-        </div>
-      </header>
+      {screen !== "game" && (
+        <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-8 sm:py-6">
+          <button className="brand" onClick={() => setScreen("home")} aria-label="Kararehe Math home">
+            <span className="brand-mark"><Leaf className="size-5" /></span>
+            <span>Kararehe Math</span>
+          </button>
+          <div className="header-controls">
+            <SessionLengthControl value={data.settings.sessionLength} onChange={setSessionLength} />
+            <LanguagePriorityControl value={languagePriority} onChange={setLanguagePriority} />
+          </div>
+        </header>
+      )}
 
       <main className="mx-auto w-full max-w-6xl px-4 pb-10 sm:px-8">
         {screen === "home" && (
@@ -380,9 +382,9 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
   }, [correct, displayedChoices, onAnswer, onNext])
 
   return (
-    <div className="game-screen mx-auto max-w-4xl animate-in fade-in duration-300">
+    <div className="game-screen mx-auto max-w-4xl animate-in fade-in pt-4 duration-300 sm:pt-6">
       <div className="mb-4 flex items-center justify-between gap-4">
-        <Button variant="ghost" onClick={onHome}><Home className="size-5" /> Home</Button>
+        <Button variant="ghost" onClick={onHome}><span className="brand-mark game-home-mark" aria-hidden="true"><Leaf className="size-4" /></span> Home</Button>
         <p className="font-bold text-muted-foreground">Question {active.questionsCompleted + 1} of {active.totalQuestions}</p>
       </div>
       <Progress value={(active.questionsCompleted / active.totalQuestions) * 100} />
@@ -421,7 +423,7 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
               />
             </div>
             {partitionComplete && <BridgeTransformationHero question={question} revealAnswer={correct} />}
-            <div className="answer-grid mt-7" aria-label="Answer choices">
+            <div className="answer-grid mt-7" key={`${question.id}-${bridgeStage}`} aria-label="Answer choices">
               {displayedChoices.map((choice) => {
                 const selected = displayedAnswers.includes(choice.value)
                 const isCorrect = correct && choice.value === displayedExpectedAnswer
@@ -596,10 +598,20 @@ function BridgeTransformationHero({ question, revealAnswer }: { question: GameQu
 }
 
 function EmojiGroup({ emoji, quantity }: { emoji: string; quantity: number }) {
+  const animalsPerRow = quantity === 4 || quantity === 6 || quantity === 8 ? quantity / 2 : 5
+  const rows = Array.from({ length: Math.ceil(quantity / animalsPerRow) }, (_, rowIndex) =>
+    Array.from(
+      { length: Math.min(animalsPerRow, quantity - rowIndex * animalsPerRow) },
+      (_, columnIndex) => rowIndex * animalsPerRow + columnIndex,
+    ),
+  )
+
   return (
     <div className="emoji-group" aria-hidden="true">
-      {Array.from({ length: quantity }, (_, index) => (
-        <span key={index}>{emoji}</span>
+      {rows.map((row, rowIndex) => (
+        <div className="emoji-row" key={rowIndex}>
+          {row.map((index) => <span key={index}>{emoji}</span>)}
+        </div>
       ))}
     </div>
   )
