@@ -277,23 +277,13 @@ function HomeScreen({ data, priority, onBegin, onResume, onParent }: {
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
       <section className="hero-grid py-8 sm:py-14">
         <div>
-          <p className="eyebrow"><Sparkles className="size-4" /> Little steps, strong number sense</p>
-          <h1 className="mt-4 max-w-3xl text-5xl font-black leading-[0.95] tracking-[-0.05em] text-balance sm:text-7xl">Maths made visible.</h1>
+          <h1 className="mt-4 max-w-3xl text-4xl font-black leading-[0.95] tracking-[-0.05em] text-balance sm:text-6xl">Helping tamariki build strong number sense through play.</h1>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground sm:text-xl">Practise making 10, building teen numbers, and bridging through ten with friendly kararehe.</p>
-          <div className="mt-7 flex flex-wrap gap-3 text-3xl" aria-label="Turtles, whales, tigers, cats, dogs, and penguins">
-            {(["turtle", "whale", "tiger", "cat", "dog", "penguin"] as const).map((id) => <span key={id} className="animal-chip" aria-hidden="true">{getAnimal(id).emoji}</span>)}
-          </div>
         </div>
-        <Card className="hero-card">
-          <CardContent className="flex h-full flex-col justify-center p-7 sm:p-9">
-            <div className="text-center text-7xl" aria-hidden="true">🐧</div>
-            <div className="mt-5 text-center text-xl"><BilingualTerm term={animalTerm("penguin", 2, priority)} /></div>
-            <div className="mt-4 rounded-2xl bg-muted p-4 text-center">
-              <div className="text-3xl font-black">10 + 4 = 14</div>
-              <div className="mt-1"><BilingualTerm term={numberTerm(14, priority)} /></div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="mx-auto flex flex-wrap gap-3 text-3xl pt-4" aria-label="Turtles, whales, tigers, cats, dogs, and penguins">
+          {(["turtle", "whale", "tiger", "cat", "dog", "penguin"] as const).map((id) => <span key={id} className="animal-chip w-24 h-24 text-5xl" aria-hidden="true">{getAnimal(id).emoji}</span>)}
+        </div>
+        
       </section>
 
       {data.activeSession && (

@@ -73,11 +73,11 @@ button:disabled { cursor: default; }
 .session-length-control:focus-within { outline: 4px solid color-mix(in oklch, var(--ring) 35%, transparent); }
 .session-length-control select { border: 0; background: transparent; color: var(--foreground); font: inherit; font-weight: 900; outline: none; cursor: pointer; }
 .eyebrow { display: inline-flex; align-items: center; gap: .45rem; color: var(--primary); font-size: .78rem; font-weight: 900; text-transform: uppercase; letter-spacing: .14em; }
-.hero-grid { display: grid; gap: 2rem; align-items: center; }
+.hero-grid { display: grid; gap: 2rem; align-items: flex-start; }
 .hero-card { min-height: 22rem; background: linear-gradient(145deg, rgb(255 255 255 / .65), rgb(245 235 195 / .75)); }
-.animal-chip { display: grid; place-items: center; width: 3.2rem; height: 3.2rem; border-radius: 1rem; background: rgb(255 255 255 / .68); border: 1.5px solid var(--border); box-shadow: 0 5px 15px rgb(45 65 38 / .06); transition: transform .2s ease; }
-.animal-chip:nth-child(even) { transform: rotate(4deg); }
-.animal-chip:nth-child(odd) { transform: rotate(-3deg); }
+.animal-chip { display: grid; place-items: center; border-radius: 1rem; background: rgb(255 255 255 / .68); border: 1.5px solid var(--border); box-shadow: 0 5px 15px rgb(45 65 38 / .06); transition: transform .2s ease; }
+.animal-chip:nth-child(even) { transform: rotate(-2deg); }
+.animal-chip:nth-child(odd) { transform: rotate(2deg); }
 .level-card { overflow: hidden; transition: transform .2s ease, box-shadow .2s ease; }
 .level-card:hover { transform: translateY(-3px); box-shadow: 0 16px 36px rgb(59 67 45 / .12); }
 .level-emoji { display: grid; place-items: center; width: 5rem; height: 5rem; border-radius: 1.5rem; background: var(--muted); font-size: 3rem; transform: rotate(4deg); transition: transform .2s ease; }
