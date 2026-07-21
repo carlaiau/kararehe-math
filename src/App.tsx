@@ -361,11 +361,6 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
       ? `${question.first} + ? = ${question.first + question.second}`
       : `${question.first} + ${question.second} = ?`
     : question.equation
-  const displayedNumberValues = isBridge
-    ? question.skill === "bridge-missing-addend"
-      ? [question.first, question.first + question.second]
-      : [question.first, question.second]
-    : visibleNumberValues(question)
   const added = isMissingBond && demonstrated ? active.selectedAnswer ?? 0 : question.skill === "bond-complete" ? question.second : 0
   const filled = question.level === 1 ? question.first : 10
 
@@ -400,12 +395,7 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
               ? <>How many more <BilingualTerm term={animal} className="animal-name-term" /> make {question.first + question.second}?</>
               : <>How many <BilingualTerm term={animal} className="animal-name-term" /> are there altogether?</>
             : promptWithAnimal(question, animal)}</h1>
-          <div className="question-equation mx-auto mt-5 inline-flex rounded-2xl bg-foreground px-6 py-3 text-3xl font-black tracking-wide text-background sm:text-4xl">{displayedEquation}</div>
-          <div className="question-number-terms mt-3 text-sm">
-            {displayedNumberValues.map((value, index) => (
-              <BilingualTerm key={`${value}-${index}`} term={numberTerm(value, priority)} />
-            ))}
-          </div>
+          <EquationWithNumberLabels equation={displayedEquation} priority={priority} />
         </CardHeader>
         <CardContent className="game-card-content pt-2">
           {isBridge && partitionComplete && (
@@ -464,13 +454,28 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
   )
 }
 
-function visibleNumberValues(question: GameQuestion) {
-  if (question.skill === "bond-missing-second") return [question.first, 10]
-  if (question.skill === "teen-missing-ones") return [10, question.first + question.second]
-  if (question.skill === "bridge-make-ten") return [question.first, question.second]
-  if (question.skill === "bridge-split") return [question.first, 10]
-  if (question.skill === "bridge-missing-addend") return [question.first, question.first + question.second]
-  return [question.first, question.second]
+function EquationWithNumberLabels({ equation, priority }: { equation: string; priority: LanguagePriority }) {
+  const tokens = equation.match(/\d+|[+?=]/g) ?? [equation]
+
+  return (
+    <div className="question-equation-shell mx-auto mt-5">
+      <div className="question-equation inline-flex rounded-2xl bg-foreground px-6 py-3 text-3xl font-black text-background sm:text-4xl" aria-label={equation}>
+        {tokens.map((token, index) => {
+          const value = /^\d+$/.test(token) ? Number(token) : null
+          return (
+            <span className="question-equation-token" key={`${token}-${index}`} aria-hidden="true">
+              <span>{token}</span>
+              {value !== null && (
+                <span className="question-equation-label">
+                  <BilingualTerm term={numberTerm(value, priority)} />
+                </span>
+              )}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function promptWithAnimal(question: GameQuestion, animal: ReturnType<typeof animalTerm>) {
