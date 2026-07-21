@@ -39,7 +39,7 @@ export function loadData(): StoredGameData {
         const question = parsed.activeSession.currentQuestion
         if (question.skill === "bridge-missing-addend") {
           question.skill = "bridge-total"
-          question.prompt = "Bridge through 10 to find the total."
+          question.prompt = "Make 10, then add to find the total."
           question.equation = `${question.first} + ${question.second} = ?`
           question.visualMode = "equation-only"
           parsed.activeSession.submittedAnswers = []

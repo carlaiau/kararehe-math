@@ -228,7 +228,7 @@ function App() {
 
       <main className="mx-auto w-full max-w-6xl px-4 pb-10 sm:px-8">
         {screen === "home" && (
-          <HomeScreen data={data} priority={languagePriority} onBegin={beginLevel} onResume={() => setScreen("game")} onParent={() => setScreen("parent")} />
+          <HomeScreen data={data} onBegin={beginLevel} onResume={() => setScreen("game")} onParent={() => setScreen("parent")} />
         )}
         {screen === "game" && data.activeSession && (
           <GameScreen active={data.activeSession} priority={languagePriority} onAnswer={answerQuestion} onNext={nextQuestion} onHome={() => setScreen("home")} />
@@ -266,9 +266,8 @@ function App() {
   )
 }
 
-function HomeScreen({ data, priority, onBegin, onResume, onParent }: {
+function HomeScreen({ data, onBegin, onResume, onParent }: {
   data: StoredGameData
-  priority: LanguagePriority
   onBegin: (level: LevelId) => void
   onResume: () => void
   onParent: () => void
@@ -277,8 +276,8 @@ function HomeScreen({ data, priority, onBegin, onResume, onParent }: {
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
       <section className="hero-grid py-8 sm:py-14">
         <div>
-          <h1 className="mt-4 max-w-3xl text-4xl font-black leading-[0.95] tracking-[-0.05em] text-balance sm:text-6xl">Helping tamariki build strong number sense through play.</h1>
-          <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground sm:text-xl">Practise making 10, building teen numbers, and bridging through ten with friendly kararehe.</p>
+          <h1 className="mt-4 max-w-3xl text-4xl font-black leading-[0.95] tracking-[-0.05em] text-balance sm:text-6xl">Helping tamariki become confident with numbers through play.</h1>
+          <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground sm:text-xl">Practise making 10, building teen numbers, and turning hard sums into easy sums with friendly kararehe.</p>
         </div>
         <div className="mx-auto flex flex-wrap gap-3 text-3xl pt-4" aria-label="Turtles, whales, tigers, cats, dogs, and penguins">
           {(["turtle", "whale", "tiger", "cat", "dog", "penguin"] as const).map((id) => <span key={id} className="animal-chip w-24 h-24 text-5xl" aria-hidden="true">{getAnimal(id).emoji}</span>)}
@@ -299,9 +298,9 @@ function HomeScreen({ data, priority, onBegin, onResume, onParent }: {
       )}
 
       <div className="level-grid grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        <LevelCard level={1} title="Make 10" subtitle="Ten buddies" emoji="🐢" description="Find the number partners that join together to make ten." onClick={() => onBegin(1)} />
-        <LevelCard level={2} title="Teen Numbers" subtitle="One ten + some ones" emoji="🐋" description="Build 11 to 19 from one full group of ten and loose ones." onClick={() => onBegin(2)} />
-        <LevelCard level={3} title="Bridge through 10" subtitle="Make ten, then add" emoji="🐕" description="Split an addition to fill ten first, then add the animals left over." onClick={() => onBegin(3)} />
+        <LevelCard level={1} title="Make 10" subtitle="Find the friends that make ten." emoji="🐢" description="Practise pairs such as 6 and 4, or 7 and 3." onClick={() => onBegin(1)} />
+        <LevelCard level={2} title="Build Teen Numbers" subtitle="Build numbers from one full ten and some extra ones." emoji="🐋" description="Build 11 to 19 from one full group of ten and loose ones." onClick={() => onBegin(2)} />
+        <LevelCard level={3} title="Make 10 Then Add" subtitle="Make bigger sums easier." emoji="🐕" description="Fill ten first, then add the animals left over." onClick={() => onBegin(3)} />
       </div>
       <div className="mt-6 flex justify-center">
         <Button variant="ghost" onClick={onParent}><BarChart3 className="size-5" /> Parent view</Button>
@@ -313,17 +312,16 @@ function HomeScreen({ data, priority, onBegin, onResume, onParent }: {
 function LevelCard({ level, title, subtitle, emoji, description, onClick }: { level: LevelId; title: string; subtitle: string; emoji: string; description: string; onClick: () => void }) {
   return (
     <Card className="level-card group">
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-black uppercase tracking-[0.15em] text-accent">Level {level}</p>
-          <h2 className="mt-2 text-3xl font-black">{title}</h2>
-          <p className="mt-1 font-semibold text-muted-foreground">{subtitle}</p>
+      <CardHeader className="level-card-header flex flex-row items-start justify-between gap-4">
+        <div className="level-card-heading">
+          <h2 className="level-card-title text-3xl font-black">{title}</h2>
+          <p className="level-card-subtitle mt-1 font-semibold text-muted-foreground">{subtitle}</p>
         </div>
         <span className="level-emoji" aria-hidden="true">{emoji}</span>
       </CardHeader>
-      <CardContent>
-        <p className="min-h-14 leading-relaxed text-muted-foreground">{description}</p>
-        <Button size="lg" className="mt-6 w-full" onClick={onClick}>Start Level {level} <Play className="size-5 fill-current" /></Button>
+      <CardContent className="level-card-content">
+        <p className="level-card-description leading-relaxed text-muted-foreground">{description}</p>
+        <Button size="lg" className="level-card-action w-full" onClick={onClick}>Start <Play className="size-5 fill-current" /></Button>
       </CardContent>
     </Card>
   )
@@ -476,7 +474,7 @@ function promptWithAnimal(question: GameQuestion, animal: ReturnType<typeof anim
   if (question.skill === "bridge-make-ten") return <>Can you fill the ten-frame with the <BilingualTerm term={animal} className="animal-name-term" />?</>
   if (question.skill === "bridge-split") return <>{question.first} needs how many more to make 10?</>
   if (question.skill === "bridge-missing-addend") return <>How many more <BilingualTerm term={animal} className="animal-name-term" /> make {question.first + question.second}?</>
-  if (question.skill === "bridge-total") return <>Bridge through 10. How many <BilingualTerm term={animal} className="animal-name-term" /> altogether?</>
+  if (question.skill === "bridge-total") return <>Make 10, then add. How many <BilingualTerm term={animal} className="animal-name-term" /> altogether?</>
   return <>How many <BilingualTerm term={animal} className="animal-name-term" /> are there altogether?</>
 }
 
@@ -722,7 +720,7 @@ function ParentScreen({ data, onBack, onExport, onReset }: { data: StoredGameDat
 function LevelThreeProgress({ attempts }: { attempts: QuestionAttempt[] }) {
   const rows = [
     {
-      label: "Bridge through ten",
+      label: "Make 10 then add",
       matches: (attempt: QuestionAttempt) => attempt.skill !== "bridge-missing-addend",
       succeeds: (attempt: QuestionAttempt) => attempt.sumCorrectOnFirstAttempt ?? attempt.correctOnFirstAttempt,
     },

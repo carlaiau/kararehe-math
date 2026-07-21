@@ -189,7 +189,7 @@ function levelThreeQuestion(attempts: QuestionAttempt[], animal: AnimalType, que
       ? "Move animals to fill the ten-frame."
       : isSplit
         ? `${selected.first} needs how many more to make 10?`
-        : "Bridge through 10 to find the total.",
+        : "Make 10, then add to find the total.",
     equation: isMakeTen
       ? `${selected.first} + ${selected.second}`
       : isSplit
