@@ -1,6 +1,7 @@
 export type LevelId = 1 | 2 | 3
 
 export type LanguagePriority = "english-first" | "maori-first"
+export type QuestionPresentation = "numbers" | "english-words" | "maori-words"
 export type SessionLength = 10 | 20 | 30
 
 export type AnimalType =
@@ -97,6 +98,9 @@ export interface StoredGameData {
   appVersion: string
   settings: {
     languagePriority: LanguagePriority
+    showEnglish: boolean
+    showMaori: boolean
+    questionPresentation: QuestionPresentation
     sessionLength: SessionLength
   }
   sessions: GameSession[]

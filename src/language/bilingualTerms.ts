@@ -5,12 +5,14 @@ import type { AnimalType, LanguagePriority } from "@/types/game"
 export interface BilingualTerm {
   primary: string
   secondary: string
+  english: string
+  maori: string
 }
 
 function order(en: string, mi: string, priority: LanguagePriority): BilingualTerm {
   return priority === "maori-first"
-    ? { primary: mi, secondary: en }
-    : { primary: en, secondary: mi }
+    ? { primary: mi, secondary: en, english: en, maori: mi }
+    : { primary: en, secondary: mi, english: en, maori: mi }
 }
 
 export function animalTerm(id: AnimalType, quantity: number, priority: LanguagePriority) {

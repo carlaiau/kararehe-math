@@ -6,7 +6,13 @@ export const STORAGE_KEY = "kararehe-math:data"
 export const initialData: StoredGameData = {
   schemaVersion: 1,
   appVersion: "0.1.0",
-  settings: { languagePriority: "english-first", sessionLength: 10 },
+  settings: {
+    languagePriority: "english-first",
+    showEnglish: true,
+    showMaori: true,
+    questionPresentation: "numbers",
+    sessionLength: 10,
+  },
   sessions: [],
   attempts: [],
   activeSession: null,
@@ -28,6 +34,9 @@ export function loadData(): StoredGameData {
     const parsed: unknown = JSON.parse(raw)
     if (!isStoredGameData(parsed)) return initialData
     parsed.settings.sessionLength ??= 10
+    parsed.settings.showEnglish ??= true
+    parsed.settings.showMaori ??= true
+    parsed.settings.questionPresentation ??= "numbers"
     if (parsed.activeSession) {
       parsed.activeSession.totalQuestions ??= 10
       parsed.activeSession.recentItemKeys ??= [itemKey(

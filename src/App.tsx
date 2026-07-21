@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, BarChart3, Code2, Download, ExternalLink, Home, Info, Leaf, Play, RotateCcw, Sparkles } from "lucide-react"
-import { BilingualTerm } from "@/components/BilingualTerm"
-import { LanguagePriorityControl } from "@/components/LanguagePriorityControl"
+import { ArrowLeft, BarChart3, Code2, Download, ExternalLink, Home, Info, Play, RotateCcw, Settings, Sparkles } from "lucide-react"
+import { BilingualTerm, LanguageDisplayProvider } from "@/components/BilingualTerm"
 import { SessionLengthControl } from "@/components/SessionLengthControl"
 import { TenFrame } from "@/components/TenFrame"
 import { Button } from "@/components/ui/button"
@@ -17,6 +16,7 @@ import type {
   GameQuestion,
   LanguagePriority,
   LevelId,
+  QuestionPresentation,
   QuestionAttempt,
   SessionLength,
   StoredGameData,
@@ -53,15 +53,12 @@ function App() {
   const [pendingLevel, setPendingLevel] = useState<LevelId | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [lastCompletedSessionId, setLastCompletedSessionId] = useState<string | null>(null)
 
   useEffect(() => saveData(data), [data])
 
-  const languagePriority = data.settings.languagePriority
-
-  const setLanguagePriority = (value: LanguagePriority) => {
-    setData((current) => ({ ...current, settings: { ...current.settings, languagePriority: value } }))
-  }
+  const languagePriority: LanguagePriority = "english-first"
 
   const setSessionLength = (value: SessionLength) => {
     setData((current) => ({ ...current, settings: { ...current.settings, sessionLength: value } }))
@@ -213,18 +210,22 @@ function App() {
   }
 
   return (
+    <LanguageDisplayProvider settings={{ showEnglish: data.settings.showEnglish, showMaori: data.settings.showMaori }}>
     <div className="min-h-svh">
       {screen !== "game" && (
         <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-8 sm:py-6">
           <button className="brand" onClick={() => setScreen("home")} aria-label="Kararehe Math home">
-            <span className="brand-mark"><Leaf className="size-5" /></span>
+            <img className="brand-mark" src="/icon-192.png" alt="" />
             <span>Kararehe Math</span>
           </button>
           <div className="header-controls">
-            <SessionLengthControl value={data.settings.sessionLength} onChange={setSessionLength} />
-            <LanguagePriorityControl value={languagePriority} onChange={setLanguagePriority} />
-            <Button variant="ghost" size="icon" onClick={() => setAboutOpen(true)} aria-label="About Kararehe Math" title="About Kararehe Math">
+            <Button variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Game settings" title="Game settings">
+              <Settings className="size-5" />
+              <span>Settings</span>
+            </Button>
+            <Button variant="ghost" onClick={() => setAboutOpen(true)} aria-label="About Kararehe Math" title="About Kararehe Math">
               <Info className="size-5" />
+              <span>Info</span>
             </Button>
           </div>
         </header>
@@ -235,7 +236,7 @@ function App() {
           <HomeScreen data={data} onBegin={beginLevel} onResume={() => setScreen("game")} onParent={() => setScreen("parent")} />
         )}
         {screen === "game" && data.activeSession && (
-          <GameScreen active={data.activeSession} priority={languagePriority} onAnswer={answerQuestion} onNext={nextQuestion} onHome={() => setScreen("home")} />
+          <GameScreen active={data.activeSession} priority={languagePriority} presentation={data.settings.questionPresentation} showNumberLabels={data.settings.showEnglish || data.settings.showMaori} onAnswer={answerQuestion} onNext={nextQuestion} onHome={() => setScreen("home")} />
         )}
         {screen === "complete" && (
           <CompleteScreen data={data} sessionId={lastCompletedSessionId} priority={languagePriority} onHome={() => setScreen("home")} />
@@ -259,10 +260,38 @@ function App() {
       <Dialog open={confirmReset} onOpenChange={setConfirmReset}>
         <DialogContent>
           <DialogTitle>Delete all learning progress?</DialogTitle>
-          <DialogDescription>This removes every session and answer stored on this device. Your language-priority setting will stay the same. This cannot be undone in the app.</DialogDescription>
+          <DialogDescription>This removes every session and answer stored on this device. Your game settings will stay the same. This cannot be undone in the app.</DialogDescription>
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setConfirmReset(false)}>Cancel</Button>
             <Button variant="danger" onClick={resetProgress}>Delete progress</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent>
+          <DialogTitle>Game settings</DialogTitle>
+          <DialogDescription>Choose the vocabulary and number format used in new and resumed questions.</DialogDescription>
+          <div className="mt-6 space-y-6">
+            <div className="flex items-center justify-between gap-4 rounded-2xl border-2 border-border p-4">
+              <div><strong>Session length</strong><p className="text-sm text-muted-foreground">Questions in each new session</p></div>
+              <SessionLengthControl value={data.settings.sessionLength} onChange={setSessionLength} />
+            </div>
+            <fieldset>
+              <legend className="font-black">Vocabulary shown</legend>
+              <div className="mt-3 grid gap-3">
+                <SettingsCheckbox label="Show English" checked={data.settings.showEnglish} onChange={(checked) => setData((current) => ({ ...current, settings: { ...current.settings, showEnglish: checked } }))} />
+                <SettingsCheckbox label="Show te reo Māori" checked={data.settings.showMaori} onChange={(checked) => setData((current) => ({ ...current, settings: { ...current.settings, showMaori: checked } }))} />
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="font-black">Question format</legend>
+              <div className="mt-3 grid gap-3">
+                <SettingsRadio label="Ask questions with numerals" value="numbers" selected={data.settings.questionPresentation} onChange={(value) => setData((current) => ({ ...current, settings: { ...current.settings, questionPresentation: value } }))} />
+                <SettingsRadio label="Ask questions in English words only" value="english-words" selected={data.settings.questionPresentation} onChange={(value) => setData((current) => ({ ...current, settings: { ...current.settings, questionPresentation: value } }))} />
+                <SettingsRadio label="Ask questions in te reo Māori words only" value="maori-words" selected={data.settings.questionPresentation} onChange={(value) => setData((current) => ({ ...current, settings: { ...current.settings, questionPresentation: value } }))} />
+              </div>
+            </fieldset>
           </div>
         </DialogContent>
       </Dialog>
@@ -288,6 +317,25 @@ function App() {
         </DialogContent>
       </Dialog>
     </div>
+    </LanguageDisplayProvider>
+  )
+}
+
+function SettingsCheckbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex min-h-12 items-center gap-3 rounded-2xl border-2 border-border px-4 py-3 font-bold hover:bg-muted/60">
+      <input className="size-5 accent-primary" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <span>{label}</span>
+    </label>
+  )
+}
+
+function SettingsRadio({ label, value, selected, onChange }: { label: string; value: QuestionPresentation; selected: QuestionPresentation; onChange: (value: QuestionPresentation) => void }) {
+  return (
+    <label className="flex min-h-12 items-center gap-3 rounded-2xl border-2 border-border px-4 py-3 font-bold hover:bg-muted/60">
+      <input className="size-5 accent-primary" type="radio" name="question-presentation" value={value} checked={selected === value} onChange={() => onChange(value)} />
+      <span>{label}</span>
+    </label>
   )
 }
 
@@ -352,9 +400,11 @@ function LevelCard({ level, title, subtitle, emoji, description, onClick }: { le
   )
 }
 
-function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
+function GameScreen({ active, priority, presentation, showNumberLabels, onAnswer, onNext, onHome }: {
   active: ActiveSession
   priority: LanguagePriority
+  presentation: QuestionPresentation
+  showNumberLabels: boolean
   onAnswer: (answer: number) => void
   onNext: () => void
   onHome: () => void
@@ -397,7 +447,7 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
   return (
     <div className="game-screen mx-auto max-w-4xl animate-in fade-in pt-4 duration-300 sm:pt-6">
       <div className="mb-4 flex items-center justify-between gap-4">
-        <Button variant="ghost" onClick={onHome}><span className="brand-mark game-home-mark" aria-hidden="true"><Leaf className="size-4" /></span> Home</Button>
+        <Button variant="ghost" onClick={onHome}><img className="brand-mark game-home-mark" src="/icon-192.png" alt="" /> Home</Button>
         <p className="font-bold text-muted-foreground">Question {active.questionsCompleted + 1} of {active.totalQuestions}</p>
       </div>
       <Progress value={(active.questionsCompleted / active.totalQuestions) * 100} />
@@ -407,22 +457,24 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
           <p className="text-sm font-black uppercase tracking-[0.16em] text-accent">Level {active.level}</p>
           <h1 className="mt-3 text-2xl font-black sm:text-3xl">{isBridge
             ? question.skill === "bridge-missing-addend"
-              ? <>How many more <BilingualTerm term={animal} className="animal-name-term" /> make {question.first + question.second}?</>
+              ? <>How many more <BilingualTerm term={animal} className="animal-name-term" /> make {questionNumber(question.first + question.second, presentation)}?</>
               : <>How many <BilingualTerm term={animal} className="animal-name-term" /> are there altogether?</>
-            : promptWithAnimal(question, animal)}</h1>
-          <EquationWithNumberLabels equation={displayedEquation} priority={priority} />
+            : promptWithAnimal(question, animal, presentation)}</h1>
+          <EquationWithNumberLabels equation={displayedEquation} priority={priority} presentation={presentation} showLabels={showNumberLabels} />
         </CardHeader>
         <CardContent className="game-card-content pt-2">
           {isBridge && partitionComplete && (
             <div className="bridge-partition-success" role="status">
               <strong>Ka pai!</strong>
-              <span>{question.first} needs {10 - question.first} to make 10.</span>
+              <span>{questionNumber(question.first, presentation)} needs {questionNumber(10 - question.first, presentation)} to make {questionNumber(10, presentation)}.</span>
             </div>
           )}
           {isBridge && (
             <div className={`bridge-step-prompt ${partitionComplete ? "bridge-step-two" : ""}`} role="status">
               <span>Step {partitionComplete ? "2" : "1"} of 2</span>
-              <strong>{partitionComplete ? "Add what’s left" : "Make 10"}</strong>
+              <strong>{partitionComplete
+                ? "Add what’s left"
+                : `How many of the ${questionNumber(question.second, presentation)} join ${questionNumber(question.first, presentation)} to make ${questionNumber(10, presentation)}?`}</strong>
             </div>
           )}
           <div className={`question-workspace ${partitionComplete ? "bridge-sum-workspace" : ""}`}>
@@ -435,20 +487,21 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
                 bridgeStage={bridgeStage}
               />
             </div>
-            {partitionComplete && <BridgeTransformationHero question={question} revealAnswer={correct} />}
-            <div className="answer-grid mt-7" key={`${question.id}-${bridgeStage}`} aria-label="Answer choices">
+            {partitionComplete && <BridgeTransformationHero question={question} revealAnswer={correct} presentation={presentation} />}
+            <div className={`answer-grid mt-7 ${presentation !== "numbers" ? "answer-grid-words" : ""}`} key={`${question.id}-${bridgeStage}`} aria-label="Answer choices">
               {displayedChoices.map((choice) => {
                 const selected = displayedAnswers.includes(choice.value)
                 const isCorrect = correct && choice.value === displayedExpectedAnswer
+                const displayedChoice = questionNumber(choice.value, presentation)
                 return (
                   <button
                     key={choice.value}
-                    className={`answer-button ${selected ? "answer-selected" : ""} ${isCorrect ? "answer-correct" : ""}`}
+                    className={`answer-button ${presentation !== "numbers" ? "answer-button-word" : ""} ${selected ? "answer-selected" : ""} ${isCorrect ? "answer-correct" : ""}`}
                     onClick={() => isCorrect ? onNext() : onAnswer(choice.value)}
                     disabled={correct && !isCorrect}
-                    aria-label={isCorrect ? `Answer ${choice.value}, correct. Continue` : `Answer ${choice.value}`}
+                    aria-label={isCorrect ? `Answer ${displayedChoice}, correct. Continue` : `Answer ${displayedChoice}`}
                   >
-                    <span>{choice.label}</span>
+                    <span>{displayedChoice}</span>
                     {isCorrect && <span className="answer-next-caret" aria-hidden="true"><Play className="size-5 fill-current" /></span>}
                   </button>
                 )
@@ -462,25 +515,37 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
         {demonstrated && question.level === 2 && (
           <p className="teaching-summary">One ten and {question.second} more make {question.first + question.second}.</p>
         )}
-        <Feedback active={active} priority={priority} />
+        <Feedback active={active} priority={priority} presentation={presentation} />
         {correct && <Button size="lg" className="next-button mt-5 w-full sm:mx-auto sm:flex sm:w-56" onClick={onNext}>Next <Play className="size-5 fill-current" /></Button>}
       </div>
     </div>
   )
 }
 
-function EquationWithNumberLabels({ equation, priority }: { equation: string; priority: LanguagePriority }) {
+function questionNumber(value: number, presentation: QuestionPresentation) {
+  if (presentation === "numbers") return String(value)
+  const term = numberTerm(value, "english-first")
+  return presentation === "english-words" ? term.english : term.maori
+}
+
+function questionEquation(equation: string, presentation: QuestionPresentation) {
+  return equation.replace(/\d+/g, (value) => questionNumber(Number(value), presentation))
+}
+
+function EquationWithNumberLabels({ equation, priority, presentation, showLabels }: { equation: string; priority: LanguagePriority; presentation: QuestionPresentation; showLabels: boolean }) {
   const tokens = equation.match(/\d+|[+?=]/g) ?? [equation]
+  const accessibleEquation = tokens.map((token) => /^\d+$/.test(token) ? questionNumber(Number(token), presentation) : token).join(" ")
+  const hasNumberLabels = presentation === "numbers" && showLabels
 
   return (
-    <div className="question-equation-shell mx-auto mt-5">
-      <div className="question-equation inline-flex rounded-2xl bg-foreground px-6 py-3 text-3xl font-black text-background sm:text-4xl" aria-label={equation}>
+    <div className={`question-equation-shell mx-auto mt-5 ${!hasNumberLabels ? "question-equation-shell-no-labels" : ""}`}>
+      <div className={`question-equation inline-flex rounded-2xl bg-foreground px-6 py-3 text-3xl font-black text-background sm:text-4xl ${presentation !== "numbers" ? "question-equation-words" : ""}`} aria-label={accessibleEquation}>
         {tokens.map((token, index) => {
           const value = /^\d+$/.test(token) ? Number(token) : null
           return (
             <span className="question-equation-token" key={`${token}-${index}`} aria-hidden="true">
-              <span>{token}</span>
-              {value !== null && (
+              <span>{value === null ? token : questionNumber(value, presentation)}</span>
+              {value !== null && hasNumberLabels && (
                 <span className="question-equation-label">
                   <BilingualTerm term={numberTerm(value, priority)} />
                 </span>
@@ -493,12 +558,12 @@ function EquationWithNumberLabels({ equation, priority }: { equation: string; pr
   )
 }
 
-function promptWithAnimal(question: GameQuestion, animal: ReturnType<typeof animalTerm>) {
-  if (question.skill === "bond-missing-second") return <>How many more <BilingualTerm term={animal} className="animal-name-term" /> make 10?</>
-  if (question.skill === "teen-missing-ones") return <>{question.first + question.second} is 10 and how many more?</>
+function promptWithAnimal(question: GameQuestion, animal: ReturnType<typeof animalTerm>, presentation: QuestionPresentation) {
+  if (question.skill === "bond-missing-second") return <>How many more <BilingualTerm term={animal} className="animal-name-term" /> make {questionNumber(10, presentation)}?</>
+  if (question.skill === "teen-missing-ones") return <>{questionNumber(question.first + question.second, presentation)} is {questionNumber(10, presentation)} and how many more?</>
   if (question.skill === "bridge-make-ten") return <>Can you fill the ten-frame with the <BilingualTerm term={animal} className="animal-name-term" />?</>
-  if (question.skill === "bridge-split") return <>{question.first} needs how many more to make 10?</>
-  if (question.skill === "bridge-missing-addend") return <>How many more <BilingualTerm term={animal} className="animal-name-term" /> make {question.first + question.second}?</>
+  if (question.skill === "bridge-split") return <>{questionNumber(question.first, presentation)} needs how many more to make {questionNumber(10, presentation)}?</>
+  if (question.skill === "bridge-missing-addend") return <>How many more <BilingualTerm term={animal} className="animal-name-term" /> make {questionNumber(question.first + question.second, presentation)}?</>
   if (question.skill === "bridge-total") return <>Make 10, then add. How many <BilingualTerm term={animal} className="animal-name-term" /> altogether?</>
   return <>How many <BilingualTerm term={animal} className="animal-name-term" /> are there altogether?</>
 }
@@ -580,21 +645,21 @@ function QuestionVisual({ question, filled, added, priority, bridgeStage }: { qu
   )
 }
 
-function BridgeTransformationHero({ question, revealAnswer }: { question: GameQuestion; revealAnswer: boolean }) {
+function BridgeTransformationHero({ question, revealAnswer, presentation }: { question: GameQuestion; revealAnswer: boolean; presentation: QuestionPresentation }) {
   const toTen = 10 - question.first
   const remaining = question.second - toTen
   const total = question.first + question.second
   const missingAddend = question.skill === "bridge-missing-addend"
   const lines = missingAddend
     ? [
-        `${question.first} + ? = ${total}`,
-        `${question.first} + ${toTen} + ${remaining} = ${total}`,
-        `${toTen} + ${remaining} = ?`,
+        `${questionNumber(question.first, presentation)} + ? = ${questionNumber(total, presentation)}`,
+        `${questionNumber(question.first, presentation)} + ${questionNumber(toTen, presentation)} + ${questionNumber(remaining, presentation)} = ${questionNumber(total, presentation)}`,
+        `${questionNumber(toTen, presentation)} + ${questionNumber(remaining, presentation)} = ?`,
       ]
     : [
-        `${question.first} + ${question.second}`,
-        `${question.first} + ${toTen} + ${remaining}`,
-        `10 + ${remaining}`,
+        `${questionNumber(question.first, presentation)} + ${questionNumber(question.second, presentation)}`,
+        `${questionNumber(question.first, presentation)} + ${questionNumber(toTen, presentation)} + ${questionNumber(remaining, presentation)}`,
+        `${questionNumber(10, presentation)} + ${questionNumber(remaining, presentation)}`,
       ]
   const answer = missingAddend ? question.second : total
   return (
@@ -605,7 +670,7 @@ function BridgeTransformationHero({ question, revealAnswer }: { question: GameQu
           <span className="bridge-proof-down" aria-hidden="true">↓</span>
         </div>
       ))}
-      <strong key={revealAnswer ? "answer" : "unknown"} className={`bridge-proof-result ${revealAnswer ? "bridge-proof-answer" : ""}`}>{revealAnswer ? answer : "?"}</strong>
+      <strong key={revealAnswer ? "answer" : "unknown"} className={`bridge-proof-result ${revealAnswer ? "bridge-proof-answer" : ""}`}>{revealAnswer ? questionNumber(answer, presentation) : "?"}</strong>
     </div>
   )
 }
@@ -630,7 +695,7 @@ function EmojiGroup({ emoji, quantity }: { emoji: string; quantity: number }) {
   )
 }
 
-function Feedback({ active, priority }: { active: ActiveSession; priority: LanguagePriority }) {
+function Feedback({ active, priority, presentation }: { active: ActiveSession; priority: LanguagePriority; presentation: QuestionPresentation }) {
   const question = active.currentQuestion
   if (active.feedbackState === "answering") {
     if (question.level === 3 && active.bridgeStage === "sum") return null
@@ -647,7 +712,7 @@ function Feedback({ active, priority }: { active: ActiveSession; priority: Langu
     return (
       <div className="feedback feedback-good" role="status">
         <span className="text-2xl" aria-hidden="true">🌿</span>
-        <div><strong>Ka pai! That’s it.</strong><p>{equation} · <BilingualTerm term={numberTerm(question.expectedAnswer, priority)} /></p></div>
+        <div><strong>Ka pai! That’s it.</strong><p>{questionEquation(equation, presentation)} · <BilingualTerm term={numberTerm(question.expectedAnswer, priority)} /></p></div>
       </div>
     )
   }
@@ -655,10 +720,11 @@ function Feedback({ active, priority }: { active: ActiveSession; priority: Langu
     const expected = question.level === 3 && active.bridgeStage !== "sum"
       ? 10 - question.first
       : question.expectedAnswer
+    const displayedExpected = questionNumber(expected, presentation)
     return (
       <div className="feedback feedback-teach" role="status">
         <span className="text-2xl" aria-hidden="true">💡</span>
-        <div><strong>Let’s look closely.</strong><p>The answer is {expected}. Now choose {expected} to continue.</p></div>
+        <div><strong>Let’s look closely.</strong><p>The answer is {displayedExpected}. Now choose {displayedExpected} to continue.</p></div>
       </div>
     )
   }
@@ -668,14 +734,14 @@ function Feedback({ active, priority }: { active: ActiveSession; priority: Langu
     <div className="feedback feedback-try" role="status">
       <span className="text-2xl" aria-hidden="true">🌱</span>
       <div><strong>Have another look.</strong><p>{question.level === 1
-        ? `That makes ${total}. We need ${question.skill === "bond-complete" ? 10 : "a full ten"}.`
+        ? `That makes ${questionNumber(total, presentation)}. We need ${question.skill === "bond-complete" ? questionNumber(10, presentation) : "a full ten"}.`
         : question.level === 2
-          ? `Here is one group of 10 and ${question.second} more ${animal.primary}.`
+          ? `Here is one group of ${questionNumber(10, presentation)} and ${questionNumber(question.second, presentation)} more ${animal.primary}.`
           : active.bridgeStage === "sum"
             ? question.skill === "bridge-missing-addend"
-              ? `You used ${10 - question.first} to make 10, then ${question.second - (10 - question.first)} more. How many were added altogether?`
-              : `You made 10. Now add the ${question.second - (10 - question.first)} remaining ${animal.primary}.`
-            : `${question.first} needs ${10 - question.first} more to reach 10 first.`}</p></div>
+              ? `You used ${questionNumber(10 - question.first, presentation)} to make ${questionNumber(10, presentation)}, then ${questionNumber(question.second - (10 - question.first), presentation)} more. How many were added altogether?`
+              : `You made ${questionNumber(10, presentation)}. Now add the ${questionNumber(question.second - (10 - question.first), presentation)} remaining ${animal.primary}.`
+            : `${questionNumber(question.first, presentation)} needs ${questionNumber(10 - question.first, presentation)} more to reach ${questionNumber(10, presentation)} first.`}</p></div>
     </div>
   )
 }
