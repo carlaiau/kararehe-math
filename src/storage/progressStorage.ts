@@ -1,4 +1,5 @@
 import type { StoredGameData } from "@/types/game"
+import { answerChoicesForQuestion } from "@/game/questionGenerator"
 
 export const STORAGE_KEY = "kararehe-math:data"
 
@@ -25,7 +26,15 @@ export function loadData(): StoredGameData {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return initialData
     const parsed: unknown = JSON.parse(raw)
-    return isStoredGameData(parsed) ? parsed : initialData
+    if (!isStoredGameData(parsed)) return initialData
+    if (parsed.activeSession) {
+      parsed.activeSession.currentQuestion.answerChoices = answerChoicesForQuestion(parsed.activeSession.currentQuestion)
+      if (parsed.activeSession.currentQuestion.skill === "teen-missing-ones") {
+        const question = parsed.activeSession.currentQuestion
+        question.equation = `10 + ? = ${question.first + question.second}`
+      }
+    }
+    return parsed
   } catch {
     return initialData
   }

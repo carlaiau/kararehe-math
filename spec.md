@@ -405,11 +405,12 @@ Example:
 
 Display:
 
-- 7 visible animals
-- 3 additional animals
+- One unframed group of 7 animals
+- A second unframed group of 3 animals beside it
+- A plus sign between the groups
 - Answer choices or number input
 
-This confirms that the child understands the complete bond.
+Do not use the ten-frame for complete “altogether” questions. The two loose groups make the child attend to the equation and quantities without revealing the answer through a visibly full frame. This confirms that the child understands the complete bond.
 
 #### Type B: Missing second addend
 
@@ -460,7 +461,7 @@ Defer this type from the first playable MVP.
 
 ### Level 1 visual design
 
-Use a **ten-frame** or a clearly bounded area with ten fixed spaces.
+Use a **ten-frame** or a clearly bounded area with ten fixed spaces for missing-addend questions. Use two unframed emoji groups arranged side by side for complete “altogether” questions.
 
 Example:
 
@@ -494,7 +495,7 @@ Do not randomly scatter animals around the screen for instructional questions. S
 
 ### Level 1 answer interface
 
-For the MVP, use three large answer buttons.
+For the MVP, use nine large answer buttons in a 3 × 3 grid.
 
 For example, for:
 
@@ -502,20 +503,21 @@ For example, for:
 7 + ? = 10
 ```
 
-Display plausible choices:
+Display an ordered grid containing the full `1–9` range for missing-addend questions:
 
 ```text
-2
-3
-4
+1  2  3
+4  5  6
+7  8  9
 ```
 
 Requirements:
 
 - Exactly one correct answer
-- Distractors should be close to the correct answer
+- Missing-addend grids contain 1–9
+- Complete-bond grids contain nine values around 10, such as 6–14
 - Do not include negative numbers
-- Randomise the order of the choices
+- Keep values in ascending order from left to right and top to bottom
 - Make buttons large enough for touch use
 
 A numeric keypad can be added later.
@@ -524,8 +526,8 @@ A numeric keypad can be added later.
 
 When correct:
 
-1. Fill the empty positions with the chosen number of animals.
-2. Briefly show the complete ten-frame.
+1. For a missing-addend question, fill the empty positions with the chosen number of animals and show the complete ten-frame.
+2. For an “altogether” question, keep the two emoji groups visible and gently emphasise the completed equation.
 3. Display a short message such as:
 
 ```text
@@ -811,7 +813,7 @@ Correct answer:
 Alternative equation:
 
 ```text
-17 = 10 + ?
+10 + ? = 17
 ```
 
 #### Type D: Identify the teen number
@@ -859,7 +861,7 @@ The first playable MVP supports Types A–D and defers Type E.
 
 ### Level 2 answer interface
 
-Use three large answer choices.
+Use nine large answer choices in an ordered 3 × 3 grid.
 
 For:
 
@@ -867,31 +869,29 @@ For:
 10 + 6 = ?
 ```
 
-Choices might be:
+The grid contains every teen number from 11 through 19:
 
 ```text
-15
-16
-17
+11  12  13
+14  15  16
+17  18  19
 ```
 
 For:
 
 ```text
-17 = 10 + ?
+10 + ? = 17
 ```
 
-Choices might be:
+The grid contains every ones value from 1 through 9:
 
 ```text
-6
-7
-8
+1  2  3
+4  5  6
+7  8  9
 ```
 
-Distractors should typically be one less and one more than the correct answer.
-
-Where possible, avoid distractors that introduce unrelated concepts.
+Keep positions stable and ascending from left to right, then top to bottom. This makes the grid quick to scan and reinforces numerical order. All nine values stay within the concept currently being practised.
 
 ### Level 2 incorrect-answer behaviour
 
@@ -961,12 +961,12 @@ Show animals
 
 button.
 
-#### Phase 4: Reverse decomposition
+#### Phase 4: Missing ones
 
 Show:
 
 ```text
-14 = 10 + ?
+10 + ? = 14
 ```
 
 This phase is particularly important because missing-number equations are harder for the child.
@@ -975,7 +975,7 @@ For each teen number, unlock the formats gradually:
 
 1. Begin by counting a visible ten-group and loose ones.
 2. After one first-attempt success, unlock forward `10 + n` equation and identification forms.
-3. After one first-attempt success in a forward form, unlock the reverse `teen = 10 + ?` form.
+3. After one first-attempt success in a complete form, unlock the missing-ones `10 + ? = teen` form.
 4. Keep earlier formats available for targeted practice and review.
 
 Track mastery independently for each teen number and question format, using the same five-attempt/four-first-attempt-success rule as Level 1.
@@ -1005,7 +1005,7 @@ Level 2B:
 Solve 10 + n
 
 Level 2C:
-Solve teen number = 10 + ?
+Solve 10 + ? = teen number
 ```
 
 Do not introduce bridging questions such as:
@@ -1314,9 +1314,15 @@ interface GameQuestion {
   targetQuantity: 10,
   expectedAnswer: 3,
   answerChoices: [
+    { value: 1, label: "1" },
     { value: 2, label: "2" },
     { value: 3, label: "3" },
-    { value: 4, label: "4" }
+    { value: 4, label: "4" },
+    { value: 5, label: "5" },
+    { value: 6, label: "6" },
+    { value: 7, label: "7" },
+    { value: 8, label: "8" },
+    { value: 9, label: "9" }
   ],
   visualMode: "ten-frame"
 }
@@ -1339,9 +1345,15 @@ interface GameQuestion {
   looseQuantity: 6,
   expectedAnswer: 16,
   answerChoices: [
+    { value: 11, label: "11" },
+    { value: 12, label: "12" },
+    { value: 13, label: "13" },
+    { value: 14, label: "14" },
     { value: 15, label: "15" },
     { value: 16, label: "16" },
-    { value: 17, label: "17" }
+    { value: 17, label: "17" },
+    { value: 18, label: "18" },
+    { value: 19, label: "19" }
   ],
   visualMode: "full-ten-plus-ones"
 }
@@ -1433,7 +1445,7 @@ Audio, sound effects, mute controls, and spoken prompts are out of scope for the
 
 - Represents teen numbers as one complete ten plus loose ones.
 - Generates `10 + n = ?` questions.
-- Generates `teen number = 10 + ?` questions.
+- Generates `10 + ? = teen number` questions.
 - Shows a visual explanation after an incorrect answer.
 - Performance is recorded separately for each teen number and question type.
 

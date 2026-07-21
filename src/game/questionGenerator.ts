@@ -9,17 +9,24 @@ import type {
 
 const randomId = () => crypto.randomUUID()
 
-function shuffled<T>(values: T[]) {
-  return [...values].sort(() => Math.random() - 0.5)
-}
-
-function answerChoices(answer: number, min = 0, max = 20) {
-  const alternatives = [answer - 1, answer + 1, answer - 2, answer + 2]
-    .filter((value) => value >= min && value <= max && value !== answer)
-  return shuffled([answer, ...alternatives].slice(0, 3)).map((value) => ({
+function answerChoices(answer: number, min: number, max: number) {
+  const rangeSize = max - min + 1
+  const start = rangeSize <= 9
+    ? min
+    : Math.min(Math.max(answer - 4, min), max - 8)
+  const values = Array.from({ length: 9 }, (_, index) => start + index)
+  return values.map((value) => ({
     value,
     label: String(value),
   }))
+}
+
+export function answerChoicesForQuestion(question: GameQuestion) {
+  if (question.skill === "bond-complete") return answerChoices(question.expectedAnswer, 6, 14)
+  if (question.skill === "bond-missing-second" || question.skill === "teen-missing-ones") {
+    return answerChoices(question.expectedAnswer, 1, 9)
+  }
+  return answerChoices(question.expectedAnswer, 11, 19)
 }
 
 function chooseAnimal(recent: AnimalType[]) {
@@ -93,7 +100,9 @@ function levelOneQuestion(attempts: QuestionAttempt[], animal: AnimalType, quest
     equation: missing ? `${selected.first} + ? = 10` : `${selected.first} + ${selected.second} = ?`,
     first: selected.first, second: selected.second,
     expectedAnswer: missing ? selected.second : 10,
-    answerChoices: answerChoices(missing ? selected.second : 10, 0, 12),
+    answerChoices: missing
+      ? answerChoices(selected.second, 1, 9)
+      : answerChoices(10, 6, 14),
     visualMode: "ten-frame",
   }
 }
@@ -111,7 +120,7 @@ function levelTwoQuestion(attempts: QuestionAttempt[], animal: AnimalType, quest
     const forwardUnlocked = firstAttemptSuccess(attempts, itemKey("teen-add-ten", 10, ones))
       || firstAttemptSuccess(attempts, itemKey("teen-identify-number", 10, ones))
     if (forwardUnlocked) {
-      candidates.push({ key: itemKey("teen-missing-ones", teen, ones), teen, ones, skill: "teen-missing-ones" })
+      candidates.push({ key: itemKey("teen-missing-ones", 10, ones), teen, ones, skill: "teen-missing-ones" })
     }
   }
   const selected = chooseCandidate(candidates, attempts, sessionMode(questionNumber))
@@ -120,10 +129,12 @@ function levelTwoQuestion(attempts: QuestionAttempt[], animal: AnimalType, quest
   return {
     id: randomId(), level: 2, skill: selected.skill, animal,
     prompt: missing ? `${selected.teen} is 10 and how many more?` : count ? "How many are there altogether?" : "Which number is this?",
-    equation: missing ? `${selected.teen} = 10 + ?` : `10 + ${selected.ones} = ?`,
+    equation: missing ? `10 + ? = ${selected.teen}` : `10 + ${selected.ones} = ?`,
     first: 10, second: selected.ones,
     expectedAnswer: missing ? selected.ones : selected.teen,
-    answerChoices: answerChoices(missing ? selected.ones : selected.teen, 0, 20),
+    answerChoices: missing
+      ? answerChoices(selected.ones, 1, 9)
+      : answerChoices(selected.teen, 11, 19),
     visualMode: "full-ten-plus-ones",
   }
 }

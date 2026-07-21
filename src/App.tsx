@@ -268,7 +268,7 @@ function HomeScreen({ data, priority, onBegin, onResume, onParent }: {
       )}
 
       <div className="grid gap-5 md:grid-cols-2">
-        <LevelCard level={1} title="Make 10" subtitle="Ten buddies" emoji="🐢" description="See which two numbers fit together to fill a ten-frame." onClick={() => onBegin(1)} />
+        <LevelCard level={1} title="Make 10" subtitle="Ten buddies" emoji="🐢" description="Find the number partners that join together to make ten." onClick={() => onBegin(1)} />
         <LevelCard level={2} title="Teen Numbers" subtitle="One ten + some ones" emoji="🐋" description="Build 11 to 19 from one full group of ten and loose ones." onClick={() => onBegin(2)} />
       </div>
       <div className="mt-6 flex justify-center">
@@ -348,7 +348,7 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
         <CardContent className="pt-2">
           <QuestionVisual question={question} filled={filled} added={added} demonstrated={demonstrated} priority={priority} />
 
-          <div className="mt-7 grid grid-cols-3 gap-3 sm:gap-5" aria-label="Answer choices">
+          <div className="answer-grid mt-7" aria-label="Answer choices">
             {question.answerChoices.map((choice) => {
               const selected = active.submittedAnswers.includes(choice.value)
               const isCorrect = correct && choice.value === question.expectedAnswer
@@ -384,7 +384,20 @@ function QuestionVisual({ question, filled, added, demonstrated, priority }: { q
   const animal = getAnimal(question.animal)
   const names = animalTerm(question.animal, question.first + question.second, priority)
   if (question.level === 1) {
-    const visibleAdded = question.skill === "bond-complete" ? question.second : added
+    if (question.skill === "bond-complete") {
+      return (
+        <div
+          className="addition-groups"
+          role="img"
+          aria-label={`${question.first} ${names.primary} plus ${question.second} ${names.primary}`}
+        >
+          <EmojiGroup emoji={animal.emoji} quantity={question.first} />
+          <span className="addition-groups-plus" aria-hidden="true">+</span>
+          <EmojiGroup emoji={animal.emoji} quantity={question.second} />
+        </div>
+      )
+    }
+    const visibleAdded = added
     const overflow = Math.max(0, filled + visibleAdded - 10)
     return (
       <div className="mx-auto max-w-lg">
@@ -409,6 +422,16 @@ function QuestionVisual({ question, filled, added, demonstrated, priority }: { q
         <div className="col-span-full mt-1 text-center text-sm"><BilingualTerm term={numberTerm(question.second, priority)} /></div>
       </div>
       {demonstrated && <p className="sm:col-span-2 text-center font-bold text-accent">One ten and {question.second} more make {question.first + question.second}.</p>}
+    </div>
+  )
+}
+
+function EmojiGroup({ emoji, quantity }: { emoji: string; quantity: number }) {
+  return (
+    <div className="emoji-group" aria-hidden="true">
+      {Array.from({ length: quantity }, (_, index) => (
+        <span key={index}>{emoji}</span>
+      ))}
     </div>
   )
 }
