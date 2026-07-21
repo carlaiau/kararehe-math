@@ -328,50 +328,65 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
   }, [correct, onAnswer, onNext, question.answerChoices])
 
   return (
-    <div className="mx-auto max-w-4xl animate-in fade-in duration-300">
+    <div className="game-screen mx-auto max-w-4xl animate-in fade-in duration-300">
       <div className="mb-4 flex items-center justify-between gap-4">
         <Button variant="ghost" onClick={onHome}><Home className="size-5" /> Home</Button>
         <p className="font-bold text-muted-foreground">Question {active.questionsCompleted + 1} of 10</p>
       </div>
       <Progress value={(active.questionsCompleted / 10) * 100} />
 
-      <Card className="mt-5 overflow-hidden">
+      <Card className="game-card mt-5 overflow-hidden">
         <CardHeader className="question-header text-center">
           <p className="text-sm font-black uppercase tracking-[0.16em] text-accent">Level {active.level}</p>
           <h1 className="mt-3 text-2xl font-black sm:text-3xl">{promptWithAnimal(question, animal)}</h1>
-          <div className="mx-auto mt-5 inline-flex rounded-2xl bg-foreground px-6 py-3 text-3xl font-black tracking-wide text-background sm:text-4xl">{question.equation}</div>
-          <div className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-1 text-sm">
-            <BilingualTerm term={numberTerm(question.first, priority)} />
-            <BilingualTerm term={numberTerm(question.second, priority)} />
+          <div className="question-equation mx-auto mt-5 inline-flex rounded-2xl bg-foreground px-6 py-3 text-3xl font-black tracking-wide text-background sm:text-4xl">{question.equation}</div>
+          <div className="question-number-terms mt-3 flex flex-wrap justify-center gap-x-6 gap-y-1 text-sm">
+            {visibleNumberValues(question).map((value, index) => (
+              <BilingualTerm key={`${value}-${index}`} term={numberTerm(value, priority)} />
+            ))}
           </div>
         </CardHeader>
-        <CardContent className="pt-2">
-          <QuestionVisual question={question} filled={filled} added={added} demonstrated={demonstrated} priority={priority} />
-
-          <div className="answer-grid mt-7" aria-label="Answer choices">
-            {question.answerChoices.map((choice) => {
-              const selected = active.submittedAnswers.includes(choice.value)
-              const isCorrect = correct && choice.value === question.expectedAnswer
-              return (
-                <button
-                  key={choice.value}
-                  className={`answer-button ${selected ? "answer-selected" : ""} ${isCorrect ? "answer-correct" : ""}`}
-                  onClick={() => onAnswer(choice.value)}
-                  disabled={correct}
-                  aria-label={`Answer ${choice.value}`}
-                >
-                  {choice.label}
-                </button>
-              )
-            })}
+        <CardContent className="game-card-content pt-2">
+          <div className="question-workspace">
+            <div className="question-visual-pane">
+              <QuestionVisual question={question} filled={filled} added={added} priority={priority} />
+            </div>
+            <div className="answer-grid mt-7" aria-label="Answer choices">
+              {question.answerChoices.map((choice) => {
+                const selected = active.submittedAnswers.includes(choice.value)
+                const isCorrect = correct && choice.value === question.expectedAnswer
+                return (
+                  <button
+                    key={choice.value}
+                    className={`answer-button ${selected ? "answer-selected" : ""} ${isCorrect ? "answer-correct" : ""}`}
+                    onClick={() => onAnswer(choice.value)}
+                    disabled={correct}
+                    aria-label={`Answer ${choice.value}`}
+                  >
+                    {choice.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          <Feedback active={active} priority={priority} />
-          {correct && <Button size="lg" className="mt-5 w-full sm:mx-auto sm:flex sm:w-56" onClick={onNext}>Next <Play className="size-5 fill-current" /></Button>}
         </CardContent>
       </Card>
+      <div className="confirmation-area">
+        {demonstrated && question.level === 2 && (
+          <p className="teaching-summary">One ten and {question.second} more make {question.first + question.second}.</p>
+        )}
+        <Feedback active={active} priority={priority} />
+        {correct && <Button size="lg" className="next-button mt-5 w-full sm:mx-auto sm:flex sm:w-56" onClick={onNext}>Next <Play className="size-5 fill-current" /></Button>}
+      </div>
     </div>
   )
+}
+
+function visibleNumberValues(question: GameQuestion) {
+  if (question.skill === "bond-missing-second") return [question.first, 10]
+  if (question.skill === "teen-missing-ones") return [10, question.first + question.second]
+  return [question.first, question.second]
 }
 
 function promptWithAnimal(question: GameQuestion, animal: ReturnType<typeof animalTerm>) {
@@ -380,7 +395,7 @@ function promptWithAnimal(question: GameQuestion, animal: ReturnType<typeof anim
   return <>How many <BilingualTerm term={animal} /> are there altogether?</>
 }
 
-function QuestionVisual({ question, filled, added, demonstrated, priority }: { question: GameQuestion; filled: number; added: number; demonstrated: boolean; priority: LanguagePriority }) {
+function QuestionVisual({ question, filled, added, priority }: { question: GameQuestion; filled: number; added: number; priority: LanguagePriority }) {
   const animal = getAnimal(question.animal)
   const names = animalTerm(question.animal, question.first + question.second, priority)
   if (question.level === 1) {
@@ -412,7 +427,7 @@ function QuestionVisual({ question, filled, added, demonstrated, priority }: { q
     )
   }
   return (
-    <div className="mx-auto grid max-w-2xl items-center gap-5 sm:grid-cols-[1fr_auto]">
+    <div className="teen-visual mx-auto grid max-w-2xl items-center gap-5 sm:grid-cols-[1fr_auto]">
       <div>
         <p className="mb-2 text-center text-sm font-bold text-muted-foreground">one full ten · kotahi tekau</p>
         <TenFrame animal={question.animal} filled={10} label={`A full ten-frame with ten ${names.primary}.`} />
@@ -421,7 +436,6 @@ function QuestionVisual({ question, filled, added, demonstrated, priority }: { q
         {Array.from({ length: question.second }, (_, index) => <span key={index} aria-hidden="true">{animal.emoji}</span>)}
         <div className="col-span-full mt-1 text-center text-sm"><BilingualTerm term={numberTerm(question.second, priority)} /></div>
       </div>
-      {demonstrated && <p className="sm:col-span-2 text-center font-bold text-accent">One ten and {question.second} more make {question.first + question.second}.</p>}
     </div>
   )
 }

@@ -1374,6 +1374,9 @@ interface GameQuestion {
 - Do not use red as the primary incorrect-answer feedback
 - Do not punish errors
 - Allow time to think
+- On tablet landscape viewports, place the question visual and 3 × 3 answer grid side by side so feedback and the **Next** action remain visible without vertical scrolling.
+- Keep the white question card limited to the prompt, equation, visual, and answer grid. Teaching summaries, feedback panels, and the **Next** action sit on the page background below the card.
+- Never display the missing answer as a bilingual number-word label before the child answers; label only quantities already present in the equation.
 
 ### Ten-frame
 
