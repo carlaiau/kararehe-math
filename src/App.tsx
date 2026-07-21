@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { ArrowLeft, BarChart3, Download, Home, Leaf, Play, RotateCcw, Sparkles } from "lucide-react"
 import { BilingualTerm } from "@/components/BilingualTerm"
-import { BridgeVisual } from "@/components/BridgeVisual"
 import { LanguagePriorityControl } from "@/components/LanguagePriorityControl"
 import { SessionLengthControl } from "@/components/SessionLengthControl"
 import { TenFrame } from "@/components/TenFrame"
@@ -353,7 +352,6 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
   const partitionComplete = isBridge && bridgeStage === "sum"
   const isMissingBond = question.skill === "bond-missing-second"
   const demonstrated = active.feedbackState !== "answering" && active.selectedAnswer !== null
-  const usesAnimalMover = isBridge && bridgeStage === "partition" && question.skill === "bridge-make-ten"
   const partitionChoices = Array.from({ length: 9 }, (_, index) => ({ value: index + 1, label: String(index + 1) }))
   const displayedChoices = isBridge && bridgeStage === "partition" ? partitionChoices : question.answerChoices
   const displayedAnswers = isBridge && bridgeStage === "partition" ? active.partitionSubmittedAnswers ?? [] : active.submittedAnswers
@@ -422,7 +420,7 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
               <strong>{partitionComplete ? "Add what’s left" : "Make 10"}</strong>
             </div>
           )}
-          <div className={`question-workspace ${usesAnimalMover ? "direct-manipulation" : ""} ${partitionComplete ? "bridge-sum-workspace" : ""}`}>
+          <div className={`question-workspace ${partitionComplete ? "bridge-sum-workspace" : ""}`}>
             <div className="question-visual-pane">
               <QuestionVisual
                 question={question}
@@ -430,12 +428,10 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
                 added={added}
                 priority={priority}
                 bridgeStage={bridgeStage}
-                completed={partitionComplete}
-                onAnswer={onAnswer}
               />
             </div>
             {partitionComplete && <BridgeTransformationHero question={question} revealAnswer={correct} />}
-            {!usesAnimalMover && <div className="answer-grid mt-7" aria-label="Answer choices">
+            <div className="answer-grid mt-7" aria-label="Answer choices">
               {displayedChoices.map((choice) => {
                 const selected = displayedAnswers.includes(choice.value)
                 const isCorrect = correct && choice.value === displayedExpectedAnswer
@@ -452,7 +448,7 @@ function GameScreen({ active, priority, onAnswer, onNext, onHome }: {
                   </button>
                 )
               })}
-            </div>}
+            </div>
           </div>
 
         </CardContent>
@@ -487,7 +483,7 @@ function promptWithAnimal(question: GameQuestion, animal: ReturnType<typeof anim
   return <>How many <BilingualTerm term={animal} className="animal-name-term" /> are there altogether?</>
 }
 
-function QuestionVisual({ question, filled, added, priority, bridgeStage, completed, onAnswer }: { question: GameQuestion; filled: number; added: number; priority: LanguagePriority; bridgeStage: "partition" | "sum"; completed: boolean; onAnswer: (answer: number) => void }) {
+function QuestionVisual({ question, filled, added, priority, bridgeStage }: { question: GameQuestion; filled: number; added: number; priority: LanguagePriority; bridgeStage: "partition" | "sum" }) {
   const animal = getAnimal(question.animal)
   const names = animalTerm(question.animal, question.first + question.second, priority)
   if (question.level === 3) {
@@ -497,23 +493,11 @@ function QuestionVisual({ question, filled, added, priority, bridgeStage, comple
       return (
         <div className="bridge-static bridge-completed">
           <TenFrame animal={question.animal} filled={question.first} added={toTen} label={`A full ten-frame with ${question.first} original and ${toTen} moved ${names.primary}.`} />
+          <span className="bridge-plus" aria-hidden="true">+</span>
           <div className="bridge-extra-animals" role="img" aria-label={`${remainder} ${names.primary} remain after making ten`}>
             {Array.from({ length: remainder }, (_, index) => <span key={index}>{animal.emoji}</span>)}
           </div>
         </div>
-      )
-    }
-    if (question.skill === "bridge-make-ten") {
-      return (
-        <BridgeVisual
-          key={question.id}
-          questionId={question.id}
-          first={question.first}
-          second={question.second}
-          animal={question.animal}
-          completed={completed}
-          onComplete={onAnswer}
-        />
       )
     }
     if (question.skill !== "bridge-missing-addend") {
@@ -620,9 +604,9 @@ function Feedback({ active, priority }: { active: ActiveSession; priority: Langu
   const question = active.currentQuestion
   if (active.feedbackState === "answering") {
     if (question.level === 3 && active.bridgeStage === "sum") return null
-    const instruction = question.skill === "bridge-make-ten"
-        ? "Move only enough animals to fill the ten-frame."
-        : "Choose the answer that feels right."
+    const instruction = question.level === 3
+      ? "Choose how many fit into ten."
+      : "Choose the answer that feels right."
     return <p className="mt-5 min-h-14 text-center text-muted-foreground">{instruction}</p>
   }
   const animal = animalTerm(question.animal, question.expectedAnswer, priority)
