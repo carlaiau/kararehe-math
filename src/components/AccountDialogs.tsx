@@ -8,10 +8,14 @@ import type { LearnerProfile, StoredGameData } from "@/types/game"
 
 type AuthMode = "sign-in" | "sign-up" | "verify" | "forgot" | "reset" | "sent"
 
-export function AuthDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function AuthDialog({ open, onOpenChange, initialMode = "sign-in" }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  initialMode?: "sign-in" | "sign-up"
+}) {
   const auth = useAuth()
   const resetToken = new URLSearchParams(window.location.search).get("token")
-  const [mode, setMode] = useState<AuthMode>(resetToken ? "reset" : "sign-in")
+  const [mode, setMode] = useState<AuthMode>(resetToken ? "reset" : initialMode)
   const [email, setEmail] = useState("")
   const [displayName, setDisplayName] = useState("")
   const [password, setPassword] = useState("")

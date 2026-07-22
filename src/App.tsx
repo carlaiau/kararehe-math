@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, BarChart3, Code2, Download, ExternalLink, Home, Info, LogIn, Play, Settings, Sparkles, UserRound } from "lucide-react"
+import { ArrowLeft, BarChart3, Code2, Download, ExternalLink, Home, LogIn, Play, Settings, Sparkles, UserRound } from "lucide-react"
 import { useAuth } from "@/auth/AuthContext"
 import { AuthDialog, GuestImportDialog, ProfileDialog, VerificationDialog } from "@/components/AccountDialogs"
 import { BilingualTerm, LanguageDisplayProvider } from "@/components/BilingualTerm"
@@ -62,9 +62,9 @@ function App() {
   const [data, setData] = useState<StoredGameData>(() => loadData(GUEST_SCOPE))
   const [screen, setScreen] = useState<Screen>("home")
   const [pendingLevel, setPendingLevel] = useState<LevelId | null>(null)
-  const [aboutOpen, setAboutOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(Boolean(new URLSearchParams(window.location.search).get("token")))
+  const [authStartMode, setAuthStartMode] = useState<"sign-in" | "sign-up">("sign-in")
   const [verificationOpen, setVerificationOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [profile, setProfile] = useState<LearnerProfile | null>(null)
@@ -341,15 +341,18 @@ function App() {
             {auth.user?.emailVerified ? (
               <Button variant="ghost" onClick={() => setProfileOpen(true)} aria-label="Learner profile"><UserRound className="size-5" /><span>{profile?.displayName ?? auth.user.name}</span></Button>
             ) : (
-              <Button variant="ghost" onClick={() => auth.user ? setVerificationOpen(true) : setAuthOpen(true)} aria-label="Sign in"><LogIn className="size-5" /><span>Sign in</span></Button>
+              <Button variant="ghost" onClick={() => {
+                if (auth.user) setVerificationOpen(true)
+                else { setAuthStartMode("sign-in"); setAuthOpen(true) }
+              }} aria-label="Sign in"><LogIn className="size-5" /><span>Sign in</span></Button>
             )}
             <Button variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Game settings" title="Game settings">
               <Settings className="size-5" />
               <span>Settings</span>
             </Button>
-            <Button variant="ghost" onClick={() => setAboutOpen(true)} aria-label="About Kararehe Math" title="About Kararehe Math">
-              <Info className="size-5" />
-              <span>Info</span>
+            <Button variant="ghost" onClick={() => setScreen("parent")} aria-label="Parent view" title="Parent view">
+              <BarChart3 className="size-5" />
+              <span>Parent view</span>
             </Button>
           </div>
         </header>
@@ -357,7 +360,13 @@ function App() {
 
       <main className="mx-auto w-full max-w-6xl px-4 pb-10 sm:px-8">
         {screen === "home" && (
-          <HomeScreen data={data} onBegin={beginLevel} onResume={() => setScreen("game")} onParent={() => setScreen("parent")} />
+          <HomeScreen
+            data={data}
+            signedIn={Boolean(verifiedUser)}
+            onBegin={beginLevel}
+            onResume={() => setScreen("game")}
+            onSignUp={() => { setAuthStartMode("sign-up"); setAuthOpen(true) }}
+          />
         )}
         {screen === "game" && data.activeSession && (
           <GameScreen active={data.activeSession} priority={languagePriority} presentation={data.settings.questionPresentation} showNumberLabels={data.settings.showEnglish || data.settings.showMaori} onAnswer={answerQuestion} onNext={nextQuestion} onHome={() => setScreen("home")} />
@@ -409,27 +418,7 @@ function App() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
-        <DialogContent>
-          <DialogTitle>About</DialogTitle>
-          <DialogDescription>A small, open-source maths assistant game made by Frankie and <a className="font-bold text-primary underline decoration-primary/35 underline-offset-4 hover:decoration-primary" href="https://www.carlaiau.com" target="_blank" rel="noreferrer">
-            Carl</a> Aiau 
-          </DialogDescription>
-          <div className="mt-6 space-y-4 text-foreground">
-            
-            <a className="flex items-center gap-3 rounded-2xl border-2 border-border bg-muted/45 p-4 font-bold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/35" href="https://github.com/carlaiau/kararehe-math" target="_blank" rel="noreferrer">
-              <Code2 className="size-5 shrink-0" aria-hidden="true" />
-              <span className="flex-1">View and contribute to the open-source code on GitHub</span>
-              <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            </a>
-            <div className="rounded-2xl border-2 border-secondary/45 bg-secondary/12 p-4">
-              <strong>Educational note</strong>
-              <p className="mt-1 text-muted-foreground">I'm not an educator. This is a personal project for practising maths at home and should not be treated as professional educational advice. Contributions welcome.</p>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
+      <AuthDialog key={`${authStartMode}:${authOpen}`} open={authOpen} onOpenChange={setAuthOpen} initialMode={authStartMode} />
       <VerificationDialog open={verificationOpen} onOpenChange={setVerificationOpen} />
       <GuestImportDialog open={guestImportOpen} guestData={loadData(GUEST_SCOPE)} busy={guestImportBusy} onImport={() => void importGuestProgress()} onFresh={startFresh} />
       <ProfileDialog
@@ -473,11 +462,12 @@ function SettingsRadio({ label, value, selected, onChange }: { label: string; va
   )
 }
 
-function HomeScreen({ data, onBegin, onResume, onParent }: {
+function HomeScreen({ data, signedIn, onBegin, onResume, onSignUp }: {
   data: StoredGameData
+  signedIn: boolean
   onBegin: (level: LevelId) => void
   onResume: () => void
-  onParent: () => void
+  onSignUp: () => void
 }) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -509,9 +499,49 @@ function HomeScreen({ data, onBegin, onResume, onParent }: {
         <LevelCard level={2} title="Build Teen Numbers" subtitle="Build numbers from one full ten and some extra ones." emoji="🐋" description="Build 11 to 19 from one full group of ten and loose ones." onClick={() => onBegin(2)} />
         <LevelCard level={3} title="Make 10 Then Add" subtitle="Make bigger sums easier." emoji="🐕" description="Fill ten first, then add the animals left over." onClick={() => onBegin(3)} />
       </div>
-      <div className="mt-6 flex justify-center">
-        <Button variant="ghost" onClick={onParent}><BarChart3 className="size-5" /> Parent view</Button>
-      </div>
+      {!signedIn && (
+        <section className="mt-12 overflow-hidden rounded-[2rem] border-2 border-primary/20 bg-primary/6 p-6 sm:p-9" aria-labelledby="account-benefits-title">
+          <div className="max-w-3xl">
+            <p className="eyebrow">Why create an account?</p>
+            <h2 id="account-benefits-title" className="mt-3 text-3xl font-black tracking-[-0.035em] sm:text-4xl">Keep the thinking, not just the score.</h2>
+            <p className="mt-4 text-lg leading-relaxed text-muted-foreground">An account keeps a learning history of each attempt—not only whether an answer was right. That makes it possible to revisit answers, discuss the steps behind them in one-to-one tutoring, and build future guidance around how a child actually reasons through a problem.</p>
+          </div>
+          <div className="mt-7 grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border-2 border-border bg-card/75 p-5">
+              <strong className="text-lg">Replay attempts</strong>
+              <p className="mt-2 text-muted-foreground">Return to the answers tried, the order they were tried in, and the strategies used.</p>
+            </div>
+            <div className="rounded-2xl border-2 border-border bg-card/75 p-5">
+              <strong className="text-lg">Make reasoning visible</strong>
+              <p className="mt-2 text-muted-foreground">Keep enough context to talk through where an idea came from, not simply mark it right or wrong.</p>
+            </div>
+            <div className="rounded-2xl border-2 border-border bg-card/75 p-5">
+              <strong className="text-lg">Support guided tutoring</strong>
+              <p className="mt-2 text-muted-foreground">Prepare for future tutoring that can ask “What did you do?” and respond to the child’s logical process.</p>
+            </div>
+          </div>
+          <div className="mt-7 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+            <Button size="lg" onClick={onSignUp}><UserRound className="size-5" /> Create a learner account</Button>
+            <p className="text-sm text-muted-foreground">Free and optional. For a child, use a parent or guardian email and a nickname.</p>
+          </div>
+        </section>
+      )}
+      <section className="mt-8 grid gap-6 rounded-[2rem] border-2 border-border bg-card/55 p-6 sm:p-8 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]" aria-labelledby="about-title">
+        <div className="flex flex-col">
+          <p className="eyebrow">About this project</p>
+          <h2 id="about-title" className="mt-3 text-2xl font-black tracking-[-0.025em] sm:text-3xl">Made for practising maths at home.</h2>
+          <p className="mt-3 leading-relaxed text-muted-foreground">Kararehe Math is a small, open-source maths game made by Frankie and <a className="font-bold text-primary underline decoration-primary/35 underline-offset-4 hover:decoration-primary" href="https://www.carlaiau.com" target="_blank" rel="noreferrer">Carl</a>.</p>
+          <a className="mt-auto inline-flex w-fit items-center gap-2 pt-7 font-bold text-primary underline decoration-primary/35 underline-offset-4 transition-colors hover:decoration-primary focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/35" href="https://github.com/carlaiau/kararehe-math" target="_blank" rel="noreferrer">
+            <Code2 className="size-5 shrink-0" aria-hidden="true" />
+            <span>View and contribute on GitHub</span>
+            <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </a>
+        </div>
+        <div className="h-full rounded-2xl border-2 border-secondary/45 bg-secondary/12 p-5">
+          <strong>Educational note</strong>
+          <p className="mt-1 text-muted-foreground">I'm not an educator. This is a personal project for practising maths at home and should not be treated as professional educational advice. Contributions welcome.</p>
+        </div>
+      </section>
     </div>
   )
 }
