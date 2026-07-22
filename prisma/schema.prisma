@@ -1,0 +1,85 @@
+datasource db {
+  provider = "postgresql"
+}
+
+model LearnerProfile {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authUserId  String   @unique @map("auth_user_id")
+  displayName String   @map("display_name")
+  birthMonth  Int?     @map("birth_month") @db.SmallInt
+  birthYear   Int?     @map("birth_year") @db.SmallInt
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  settings LearnerSettings?
+  sessions LearningSession[]
+  attempts QuestionAttempt[]
+
+  @@map("learner_profiles")
+}
+
+model LearnerSettings {
+  learnerProfileId     String   @id @map("learner_profile_id") @db.Uuid
+  showEnglish          Boolean  @default(true) @map("show_english")
+  showMaori            Boolean  @default(true) @map("show_maori")
+  questionPresentation String   @default("numbers") @map("question_presentation")
+  sessionLength        Int      @default(10) @map("session_length") @db.SmallInt
+  updatedAt            DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  learnerProfile LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("learner_settings")
+}
+
+model LearningSession {
+  id                 String    @id @db.Uuid
+  learnerProfileId   String    @map("learner_profile_id") @db.Uuid
+  level              Int       @db.SmallInt
+  startedAt          DateTime  @map("started_at") @db.Timestamptz(6)
+  endedAt            DateTime? @map("ended_at") @db.Timestamptz(6)
+  status             String
+  questionsCompleted Int       @default(0) @map("questions_completed") @db.SmallInt
+  totalQuestions     Int       @map("total_questions") @db.SmallInt
+  appVersion         String    @map("app_version")
+  schemaVersion      Int       @map("schema_version") @db.SmallInt
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  learnerProfile LearnerProfile    @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  attempts       QuestionAttempt[]
+
+  @@index([learnerProfileId, startedAt(sort: Desc)], map: "learning_sessions_profile_started_idx")
+  @@map("learning_sessions")
+}
+
+model QuestionAttempt {
+  id                        String   @id @db.Uuid
+  learnerProfileId          String   @map("learner_profile_id") @db.Uuid
+  sessionId                 String   @map("session_id") @db.Uuid
+  occurredAt                DateTime @map("occurred_at") @db.Timestamptz(6)
+  level                     Int      @db.SmallInt
+  skill                     String
+  itemKey                   String   @map("item_key")
+  animal                    String
+  operands                  Int[]
+  expectedAnswer            Int      @map("expected_answer")
+  submittedAnswers          Int[]    @default([]) @map("submitted_answers")
+  partitionSubmittedAnswers Int[]    @default([]) @map("partition_submitted_answers")
+  partitionCorrectFirstTry  Boolean? @map("partition_correct_first_try")
+  sumCorrectFirstTry        Boolean? @map("sum_correct_first_try")
+  correctFirstTry           Boolean  @map("correct_first_try")
+  hintsUsed                 Int      @default(0) @map("hints_used") @db.SmallInt
+  activeDurationMs          Int      @map("active_duration_ms")
+  legacyResponseMs          Int      @map("legacy_response_ms")
+  payload                   Json     @db.JsonB
+  appVersion                String   @map("app_version")
+  schemaVersion             Int      @map("schema_version") @db.SmallInt
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  learnerProfile LearnerProfile  @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  session        LearningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([learnerProfileId, occurredAt(sort: Desc)], map: "question_attempts_profile_occurred_idx")
+  @@index([sessionId], map: "question_attempts_session_idx")
+  @@map("question_attempts")
+}

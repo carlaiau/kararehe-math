@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, BarChart3, Code2, Download, ExternalLink, Home, Info, Play, RotateCcw, Settings, Sparkles } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { ArrowLeft, BarChart3, Code2, Download, ExternalLink, Home, Info, LogIn, Play, Settings, Sparkles, UserRound } from "lucide-react"
+import { useAuth } from "@/auth/AuthContext"
+import { AuthDialog, GuestImportDialog, ProfileDialog, VerificationDialog } from "@/components/AccountDialogs"
 import { BilingualTerm, LanguageDisplayProvider } from "@/components/BilingualTerm"
 import { SessionLengthControl } from "@/components/SessionLengthControl"
 import { TenFrame } from "@/components/TenFrame"
@@ -9,8 +11,11 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Progress } from "@/components/ui/progress"
 import { getAnimal } from "@/data/animals"
 import { generateQuestion, itemKey } from "@/game/questionGenerator"
+import { useActiveLearningTimer } from "@/hooks/useActiveLearningTimer"
 import { animalTerm, numberTerm } from "@/language/bilingualTerms"
-import { exportData, initialData, loadData, saveData } from "@/storage/progressStorage"
+import { ensureLearnerProfile, loadCloudProgress, syncCloudProgress, updateLearnerProfile } from "@/services/cloudProgress"
+import { neon } from "@/services/neon"
+import { clearData, exportData, GUEST_SCOPE, hasLearningData, loadData, mergeLearningData, pendingProfileKey, saveData } from "@/storage/progressStorage"
 import type {
   ActiveSession,
   GameQuestion,
@@ -20,6 +25,7 @@ import type {
   QuestionAttempt,
   SessionLength,
   StoredGameData,
+  LearnerProfile,
 } from "@/types/game"
 
 type Screen = "home" | "game" | "complete" | "parent"
@@ -44,24 +50,106 @@ function createSession(level: LevelId, attempts: QuestionAttempt[], totalQuestio
     hintsUsed: 0,
     feedbackState: "answering",
     selectedAnswer: null,
+    activeLearningMs: 0,
   }
 }
 
 function App() {
-  const [data, setData] = useState<StoredGameData>(() => loadData())
+  const auth = useAuth()
+  const verifiedUser = auth.user?.emailVerified ? auth.user : null
+  const desiredScope = verifiedUser ? `user:${verifiedUser.id}` : GUEST_SCOPE
+  const [dataScope, setDataScope] = useState(GUEST_SCOPE)
+  const [data, setData] = useState<StoredGameData>(() => loadData(GUEST_SCOPE))
   const [screen, setScreen] = useState<Screen>("home")
   const [pendingLevel, setPendingLevel] = useState<LevelId | null>(null)
-  const [confirmReset, setConfirmReset] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [authOpen, setAuthOpen] = useState(Boolean(new URLSearchParams(window.location.search).get("token")))
+  const [verificationOpen, setVerificationOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [profile, setProfile] = useState<LearnerProfile | null>(null)
+  const [guestImportOpen, setGuestImportOpen] = useState(false)
+  const [guestImportBusy, setGuestImportBusy] = useState(false)
+  const [syncMessage, setSyncMessage] = useState("")
   const [lastCompletedSessionId, setLastCompletedSessionId] = useState<string | null>(null)
+  const bootstrapRun = useRef(0)
+  const learningTimer = useActiveLearningTimer(
+    data.activeSession?.currentQuestion.id ?? null,
+    screen === "game" && data.activeSession?.feedbackState !== "correct",
+  )
 
-  useEffect(() => saveData(data), [data])
+  useEffect(() => saveData(data, dataScope), [data, dataScope])
+
+  useEffect(() => {
+    const run = ++bootstrapRun.current
+    if (!verifiedUser) {
+      queueMicrotask(() => {
+        if (run !== bootstrapRun.current) return
+        setProfile(null)
+        setGuestImportOpen(false)
+        setDataScope(GUEST_SCOPE)
+        setData(loadData(GUEST_SCOPE))
+        setSyncMessage("")
+      })
+      return
+    }
+    const bootstrap = async () => {
+      setSyncMessage("Connecting to cloud progress…")
+      try {
+        const pendingKey = pendingProfileKey(verifiedUser.email)
+        const pending = (() => {
+          try {
+            const raw = localStorage.getItem(pendingKey)
+            return raw ? JSON.parse(raw) as { birthMonth: number | null; birthYear: number | null } : undefined
+          } catch { return undefined }
+        })()
+        const learner = await ensureLearnerProfile(verifiedUser, pending)
+        localStorage.removeItem(pendingKey)
+        const accountLocal = loadData(desiredScope)
+        const merged = await loadCloudProgress(learner.id, accountLocal)
+        if (run !== bootstrapRun.current) return
+        setProfile(learner)
+        setDataScope(desiredScope)
+        setData(merged)
+        const guest = loadData(GUEST_SCOPE)
+        const decisionKey = `kararehe-math:guest-decision:${verifiedUser.id}`
+        const hasDecision = localStorage.getItem(decisionKey) === "done"
+        if (!hasDecision && hasLearningData(guest)) {
+          setGuestImportOpen(true)
+          setSyncMessage("Choose whether to import this device’s guest progress.")
+        } else {
+          if (!hasDecision) localStorage.setItem(decisionKey, "done")
+          await syncCloudProgress(learner.id, merged)
+          setSyncMessage("Progress synced.")
+        }
+      } catch (caught) {
+        if (run !== bootstrapRun.current) return
+        setDataScope(desiredScope)
+        setData(loadData(desiredScope))
+        setSyncMessage(caught instanceof Error ? `Offline — progress will retry. ${caught.message}` : "Offline — progress will retry.")
+      }
+    }
+    void bootstrap()
+  }, [desiredScope, verifiedUser])
+
+  useEffect(() => {
+    if (!verifiedUser || !profile || guestImportOpen || dataScope !== desiredScope) return
+    const timeout = window.setTimeout(() => {
+      void syncCloudProgress(profile.id, data)
+        .then(() => setSyncMessage("Progress synced."))
+        .catch(() => setSyncMessage("Offline — saved on this device and waiting to sync."))
+    }, 700)
+    return () => window.clearTimeout(timeout)
+  }, [data, dataScope, desiredScope, guestImportOpen, profile, verifiedUser])
 
   const languagePriority: LanguagePriority = "english-first"
 
   const setSessionLength = (value: SessionLength) => {
-    setData((current) => ({ ...current, settings: { ...current.settings, sessionLength: value } }))
+    updateSettings({ sessionLength: value })
+  }
+
+  const updateSettings = (change: Partial<StoredGameData["settings"]>) => {
+    setData((current) => ({ ...current, settings: { ...current.settings, ...change, updatedAt: new Date().toISOString() } }))
   }
 
   const beginLevel = (level: LevelId) => {
@@ -120,6 +208,7 @@ function App() {
       }
       const submittedAnswers = [...active.submittedAnswers, value]
       const correct = value === active.currentQuestion.expectedAnswer
+      const activeLearningMs = correct ? learningTimer.stopAndRead() : active.activeLearningMs
       const revealed = !correct && submittedAnswers.length >= 2
       return {
         ...current,
@@ -130,6 +219,7 @@ function App() {
           answeredAt: correct ? new Date().toISOString() : active.answeredAt,
           hintsUsed: revealed ? 1 : active.hintsUsed,
           feedbackState: correct ? "correct" : revealed ? "revealed" : "incorrect",
+          activeLearningMs,
         },
       }
     })
@@ -156,6 +246,7 @@ function App() {
         && (active.level !== 3 || active.partitionSubmittedAnswers?.length === 1),
       sumCorrectOnFirstAttempt: active.level === 3 ? active.submittedAnswers.length === 1 : undefined,
       hintsUsed: active.hintsUsed,
+      activeDurationMs: Math.min(300_000, active.activeLearningMs ?? Math.max(0, Date.parse(active.answeredAt ?? new Date().toISOString()) - Date.parse(active.questionStartedAt))),
       responseMs: Math.max(0, Date.parse(active.answeredAt ?? new Date().toISOString()) - Date.parse(active.questionStartedAt)),
     }
     const attempts = [...data.attempts, attempt]
@@ -199,14 +290,42 @@ function App() {
         hintsUsed: 0,
         feedbackState: "answering",
         selectedAnswer: null,
+        activeLearningMs: 0,
       },
     }))
   }
 
-  const resetProgress = () => {
-    setData({ ...initialData, settings: data.settings })
-    setConfirmReset(false)
-    setScreen("home")
+  const finishGuestDecision = () => {
+    if (verifiedUser) localStorage.setItem(`kararehe-math:guest-decision:${verifiedUser.id}`, "done")
+    clearData(GUEST_SCOPE)
+    setGuestImportOpen(false)
+  }
+
+  const importGuestProgress = async () => {
+    if (!profile) return
+    setGuestImportBusy(true)
+    try {
+      const guestStored = loadData(GUEST_SCOPE)
+      const guest = {
+        ...guestStored,
+        settings: { ...guestStored.settings, updatedAt: new Date().toISOString() },
+        activeSession: null,
+      }
+      const merged = mergeLearningData(data, guest)
+      await syncCloudProgress(profile.id, merged)
+      setData(merged)
+      finishGuestDecision()
+      setSyncMessage("Guest progress imported and synced.")
+    } catch (caught) {
+      setSyncMessage(caught instanceof Error ? caught.message : "Could not import yet. Please try again.")
+    } finally {
+      setGuestImportBusy(false)
+    }
+  }
+
+  const startFresh = () => {
+    finishGuestDecision()
+    setSyncMessage("Started with the account’s cloud progress.")
   }
 
   return (
@@ -219,6 +338,11 @@ function App() {
             <span>Kararehe Math</span>
           </button>
           <div className="header-controls">
+            {auth.user?.emailVerified ? (
+              <Button variant="ghost" onClick={() => setProfileOpen(true)} aria-label="Learner profile"><UserRound className="size-5" /><span>{profile?.displayName ?? auth.user.name}</span></Button>
+            ) : (
+              <Button variant="ghost" onClick={() => auth.user ? setVerificationOpen(true) : setAuthOpen(true)} aria-label="Sign in"><LogIn className="size-5" /><span>Sign in</span></Button>
+            )}
             <Button variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Game settings" title="Game settings">
               <Settings className="size-5" />
               <span>Settings</span>
@@ -242,7 +366,7 @@ function App() {
           <CompleteScreen data={data} sessionId={lastCompletedSessionId} priority={languagePriority} onHome={() => setScreen("home")} />
         )}
         {screen === "parent" && (
-          <ParentScreen data={data} onBack={() => setScreen("home")} onExport={() => exportData(data)} onReset={() => setConfirmReset(true)} />
+          <ParentScreen data={data} cloudEnabled={Boolean(verifiedUser)} onBack={() => setScreen("home")} onExport={() => exportData(data, profile && verifiedUser ? { profile, email: verifiedUser.email, emailVerified: true } : undefined)} />
         )}
       </main>
 
@@ -253,17 +377,6 @@ function App() {
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setPendingLevel(null)}>Keep current session</Button>
             <Button onClick={endAndStartPending}>End and start new</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={confirmReset} onOpenChange={setConfirmReset}>
-        <DialogContent>
-          <DialogTitle>Delete all learning progress?</DialogTitle>
-          <DialogDescription>This removes every session and answer stored on this device. Your game settings will stay the same. This cannot be undone in the app.</DialogDescription>
-          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => setConfirmReset(false)}>Cancel</Button>
-            <Button variant="danger" onClick={resetProgress}>Delete progress</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -280,16 +393,16 @@ function App() {
             <fieldset>
               <legend className="font-black">Vocabulary shown</legend>
               <div className="mt-3 grid gap-3">
-                <SettingsCheckbox label="Show English" checked={data.settings.showEnglish} onChange={(checked) => setData((current) => ({ ...current, settings: { ...current.settings, showEnglish: checked } }))} />
-                <SettingsCheckbox label="Show te reo Māori" checked={data.settings.showMaori} onChange={(checked) => setData((current) => ({ ...current, settings: { ...current.settings, showMaori: checked } }))} />
+                <SettingsCheckbox label="Show English" checked={data.settings.showEnglish} onChange={(checked) => updateSettings({ showEnglish: checked })} />
+                <SettingsCheckbox label="Show te reo Māori" checked={data.settings.showMaori} onChange={(checked) => updateSettings({ showMaori: checked })} />
               </div>
             </fieldset>
             <fieldset>
               <legend className="font-black">Question format</legend>
               <div className="mt-3 grid gap-3">
-                <SettingsRadio label="Ask questions with numerals" value="numbers" selected={data.settings.questionPresentation} onChange={(value) => setData((current) => ({ ...current, settings: { ...current.settings, questionPresentation: value } }))} />
-                <SettingsRadio label="Ask questions in English words only" value="english-words" selected={data.settings.questionPresentation} onChange={(value) => setData((current) => ({ ...current, settings: { ...current.settings, questionPresentation: value } }))} />
-                <SettingsRadio label="Ask questions in te reo Māori words only" value="maori-words" selected={data.settings.questionPresentation} onChange={(value) => setData((current) => ({ ...current, settings: { ...current.settings, questionPresentation: value } }))} />
+                <SettingsRadio label="Ask questions with numerals" value="numbers" selected={data.settings.questionPresentation} onChange={(value) => updateSettings({ questionPresentation: value })} />
+                <SettingsRadio label="Ask questions in English words only" value="english-words" selected={data.settings.questionPresentation} onChange={(value) => updateSettings({ questionPresentation: value })} />
+                <SettingsRadio label="Ask questions in te reo Māori words only" value="maori-words" selected={data.settings.questionPresentation} onChange={(value) => updateSettings({ questionPresentation: value })} />
               </div>
             </fieldset>
           </div>
@@ -316,6 +429,27 @@ function App() {
           </div>
         </DialogContent>
       </Dialog>
+      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
+      <VerificationDialog open={verificationOpen} onOpenChange={setVerificationOpen} />
+      <GuestImportDialog open={guestImportOpen} guestData={loadData(GUEST_SCOPE)} busy={guestImportBusy} onImport={() => void importGuestProgress()} onFresh={startFresh} />
+      <ProfileDialog
+        key={profile?.updatedAt ?? auth.user?.id ?? "guest"}
+        open={profileOpen}
+        onOpenChange={setProfileOpen}
+        profile={profile}
+        data={data}
+        syncMessage={syncMessage}
+        onExport={() => exportData(data, profile && verifiedUser ? { profile, email: verifiedUser.email, emailVerified: true } : undefined)}
+        onSave={async (values) => {
+          if (!profile) return
+          const updated = await updateLearnerProfile(profile, values)
+          setProfile(updated)
+          if (auth.user && auth.user.name !== updated.displayName) {
+            // Keep Neon Auth's display name aligned with the app-owned profile.
+            await neon?.auth.updateUser({ name: updated.displayName })
+          }
+        }}
+      />
     </div>
     </LanguageDisplayProvider>
   )
@@ -769,12 +903,12 @@ function CompleteScreen({ data, sessionId, priority, onHome }: { data: StoredGam
   )
 }
 
-function ParentScreen({ data, onBack, onExport, onReset }: { data: StoredGameData; onBack: () => void; onExport: () => void; onReset: () => void }) {
+function ParentScreen({ data, cloudEnabled, onBack, onExport }: { data: StoredGameData; cloudEnabled: boolean; onBack: () => void; onExport: () => void }) {
   const metrics = useMemo(() => {
     const attempts = data.attempts
     const firstTry = attempts.filter((attempt) => attempt.correctOnFirstAttempt).length
     const hints = attempts.reduce((sum, attempt) => sum + attempt.hintsUsed, 0)
-    const average = attempts.length ? attempts.reduce((sum, attempt) => sum + attempt.responseMs, 0) / attempts.length / 1000 : 0
+    const average = attempts.length ? attempts.reduce((sum, attempt) => sum + (attempt.activeDurationMs ?? Math.min(300_000, attempt.responseMs)), 0) / attempts.length / 1000 : 0
     return { attempts: attempts.length, accuracy: attempts.length ? Math.round((firstTry / attempts.length) * 100) : 0, hints, average }
   }, [data.attempts])
   const recent = [...data.attempts].slice(-8).reverse()
@@ -783,8 +917,8 @@ function ParentScreen({ data, onBack, onExport, onReset }: { data: StoredGameDat
     <div className="mx-auto max-w-5xl py-4 sm:py-8">
       <Button variant="ghost" onClick={onBack}><ArrowLeft className="size-5" /> Back</Button>
       <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="eyebrow w-fit"><BarChart3 className="size-4" /> Grown-up view</p><h1 className="mt-3 text-4xl font-black">Learning progress</h1><p className="mt-2 text-muted-foreground">One learner · stored only on this device</p></div>
-        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={onExport}><Download className="size-4" /> Export JSON</Button><Button variant="danger" onClick={onReset}><RotateCcw className="size-4" /> Reset progress</Button></div>
+        <div><p className="eyebrow w-fit"><BarChart3 className="size-4" /> Grown-up view</p><h1 className="mt-3 text-4xl font-black">Learning progress</h1><p className="mt-2 text-muted-foreground">One learner · {cloudEnabled ? "synced to their account" : "stored on this device"}</p></div>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={onExport}><Download className="size-4" /> Export JSON</Button></div>
       </div>
       <div className="mt-7 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Metric label="Questions" value={String(metrics.attempts)} />
@@ -799,7 +933,7 @@ function ParentScreen({ data, onBack, onExport, onReset }: { data: StoredGameDat
           {recent.length === 0 ? <p className="px-6 pb-6 text-muted-foreground sm:px-8">No questions answered yet. Learning history will appear here.</p> : (
             <table className="w-full min-w-[620px] text-left">
               <thead><tr><th>Practice item</th><th>Level</th><th>First try</th><th>Hints</th><th>Time</th></tr></thead>
-              <tbody>{recent.map((attempt) => <tr key={attempt.id}><td className="font-bold">{attempt.itemKey.replaceAll(":", " · ")}</td><td>{attempt.level}</td><td>{attempt.correctOnFirstAttempt ? "Yes" : "Not yet"}</td><td>{attempt.hintsUsed}</td><td>{(attempt.responseMs / 1000).toFixed(1)}s</td></tr>)}</tbody>
+              <tbody>{recent.map((attempt) => <tr key={attempt.id}><td className="font-bold">{attempt.itemKey.replaceAll(":", " · ")}</td><td>{attempt.level}</td><td>{attempt.correctOnFirstAttempt ? "Yes" : "Not yet"}</td><td>{attempt.hintsUsed}</td><td>{((attempt.activeDurationMs ?? Math.min(300_000, attempt.responseMs)) / 1000).toFixed(1)}s</td></tr>)}</tbody>
             </table>
           )}
         </CardContent>

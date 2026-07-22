@@ -59,6 +59,7 @@ export interface QuestionAttempt {
   sumCorrectOnFirstAttempt?: boolean
   correctOnFirstAttempt: boolean
   hintsUsed: number
+  activeDurationMs: number
   responseMs: number
 }
 
@@ -91,10 +92,11 @@ export interface ActiveSession {
   hintsUsed: number
   feedbackState: FeedbackState
   selectedAnswer: number | null
+  activeLearningMs?: number
 }
 
 export interface StoredGameData {
-  schemaVersion: 1
+  schemaVersion: 2
   appVersion: string
   settings: {
     languagePriority: LanguagePriority
@@ -102,8 +104,26 @@ export interface StoredGameData {
     showMaori: boolean
     questionPresentation: QuestionPresentation
     sessionLength: SessionLength
+    updatedAt: string
   }
   sessions: GameSession[]
   attempts: QuestionAttempt[]
   activeSession: ActiveSession | null
+}
+
+export interface LearnerProfile {
+  id: string
+  authUserId: string
+  displayName: string
+  birthMonth: number | null
+  birthYear: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AuthUser {
+  id: string
+  email: string
+  name: string
+  emailVerified: boolean
 }
