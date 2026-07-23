@@ -790,7 +790,7 @@ function NumberSenseGameScreen({ active, priority, presentation, onAnswer, onTou
                   aria-label={question.requiresTouchCount ? `${touched.includes(index) ? "Counted" : "Count"} ${names.primary}` : undefined}
                 >
                   <span aria-hidden="true">{animal.emoji}</span>
-                  {(touched.includes(index) || revealed) && <small aria-hidden="true">{index + 1}</small>}
+                  {(touched.includes(index) || revealed) && <small aria-hidden="true">{touched.includes(index) ? touched.indexOf(index) + 1 : index + 1}</small>}
                 </button>
               ))}
             </div>
@@ -819,7 +819,7 @@ function NumberSenseGameScreen({ active, priority, presentation, onAnswer, onTou
 
           {question.level === "compare-quantities" && question.skill !== "compare-same" ? (
             <p className="number-sense-instruction">Tap the group that has {question.relation}.</p>
-          ) : (
+          ) : countingReady ? (
             <div className={`answer-grid number-sense-answer-grid ${question.skill === "subitise-match" ? "pattern-answer-grid" : ""} ${question.skill === "compare-same" ? "compare-choice-grid" : ""}`} aria-label="Answer choices">
               {question.answerChoices.map((choice) => answerButton(choice.value,
                 question.skill === "subitise-match"
@@ -830,7 +830,7 @@ function NumberSenseGameScreen({ active, priority, presentation, onAnswer, onTou
                 question.skill === "compare-same",
               ))}
             </div>
-          )}
+          ) : null}
 
           {active.feedbackState === "incorrect" && <div className="feedback feedback-warn" role="status"><span aria-hidden="true">👀</span><div><strong>Have another look.</strong><p>Try once more.</p></div></div>}
           {revealed && <div className="feedback feedback-warn" role="status"><span aria-hidden="true">🌱</span><div><strong>Let’s make it visible.</strong><p>{question.level === "compare-quantities" ? "Match one animal from each group. The group with animals left over has more." : `Count slowly: ${Array.from({ length: question.first }, (_, index) => index + 1).join(", ")}.`}</p></div></div>}
