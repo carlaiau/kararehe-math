@@ -279,11 +279,15 @@ table td { padding: 1rem 1.5rem; border-top: 1px solid var(--border); }
 .pattern-answer-grid .answer-button { padding: .65rem; }
 .compare-stage { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); width: min(100%, 46rem); min-height: 19rem; margin-inline: auto; align-items: center; gap: 1rem; }
 .compare-group { position: relative; display: grid; min-height: 17rem; place-items: center; border: 3px solid var(--border); border-radius: 2rem; background: var(--card); padding: 1rem; transition: border-color .15s ease, transform .15s ease; }
-.compare-group:not(:disabled):hover, .compare-group:not(:disabled):focus-visible { border-color: var(--accent); outline: 4px solid rgb(73 145 92 / .15); transform: translateY(-3px); }
+.compare-group:not(:disabled):focus-visible { border-color: var(--accent); outline: 4px solid rgb(73 145 92 / .15); transform: translateY(-3px); }
 .compare-group-correct { border-color: var(--accent); background: #dff0cd; box-shadow: 0 6px 0 #8daf77; }
 .compare-different-spacing .compare-group:last-child .object-pattern { gap: 2rem .4rem; }
 .compare-divider { color: var(--muted-foreground); font-weight: 900; }
 .feedback-warn { border-color: #d8be69; background: #fff7da; }
+
+@media (hover: hover) and (pointer: fine) {
+  .compare-group:not(:disabled):hover { border-color: var(--accent); outline: 4px solid rgb(73 145 92 / .15); transform: translateY(-3px); }
+}
 
 @media (max-width: 560px) {
   .number-object-field, .subitise-stage { min-height: 15rem; }
