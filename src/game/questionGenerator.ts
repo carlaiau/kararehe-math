@@ -22,7 +22,21 @@ function answerChoices(answer: number, min: number, max: number) {
   }))
 }
 
+function smallAnswerChoices(answer: number, min = 1, max = 5) {
+  const values = new Set([answer])
+  for (let distance = 1; values.size < Math.min(3, max - min + 1); distance += 1) {
+    if (answer - distance >= min) values.add(answer - distance)
+    if (answer + distance <= max) values.add(answer + distance)
+  }
+  return [...values].sort((a, b) => a - b).map((value) => ({ value, label: String(value) }))
+}
+
 export function answerChoicesForQuestion(question: GameQuestion) {
+  if (question.level === "count-objects") return smallAnswerChoices(question.expectedAnswer)
+  if (question.level === "subitise-small-groups") return smallAnswerChoices(question.expectedAnswer, 1, 4)
+  if (question.level === "compare-quantities") return question.skill === "compare-same"
+    ? [{ value: 1, label: "Same" }, { value: 0, label: "Different" }]
+    : []
   if (question.skill === "bond-complete") return answerChoices(question.expectedAnswer, 6, 14)
   if (
     question.skill === "bond-missing-second"
@@ -92,10 +106,79 @@ function chooseCandidate<T extends { key: string; boost?: number }>(
 }
 
 function sessionMode(questionNumber: number, totalQuestions: SessionLength): "targeted" | "review" | "confidence" {
-  const positionInBlock = ((questionNumber - 1) % 10) + 1
-  if (questionNumber === totalQuestions || positionInBlock === 10) return "confidence"
-  if (positionInBlock === 4 || positionInBlock === 8) return "review"
+  if (questionNumber === totalQuestions) return "confidence"
+  const progress = questionNumber / totalQuestions
+  if (progress >= 0.75 && questionNumber < totalQuestions) return "review"
   return "targeted"
+}
+
+function progressionBand(questionNumber: number, totalQuestions: SessionLength) {
+  if (questionNumber <= Math.max(1, Math.round(totalQuestions * 0.25))) return "warmup" as const
+  if (questionNumber === totalQuestions) return "confidence" as const
+  if (questionNumber === Math.max(2, totalQuestions - 2)) return "challenge" as const
+  if (questionNumber === totalQuestions - 1) return "review" as const
+  return "core" as const
+}
+
+function quantityForPosition(questionNumber: number, totalQuestions: SessionLength, max = 5) {
+  const band = progressionBand(questionNumber, totalQuestions)
+  if (band === "warmup") return 1 + ((questionNumber - 1) % Math.min(3, max))
+  if (band === "confidence") return 2 + ((questionNumber + totalQuestions) % Math.max(1, max - 1))
+  if (band === "challenge") return max
+  return 1 + ((questionNumber * 3 + totalQuestions) % max)
+}
+
+function countQuestion(animal: AnimalType, questionNumber: number, totalQuestions: SessionLength): GameQuestion {
+  const quantity = quantityForPosition(questionNumber, totalQuestions)
+  const band = progressionBand(questionNumber, totalQuestions)
+  const touch = band === "core" || band === "challenge"
+  const layout = band === "warmup" || questionNumber % 3 === 0 ? "structured" : "scattered"
+  const skill: QuestionSkill = touch ? "touch-count" : "count-choose"
+  return {
+    id: randomId(), level: "count-objects", skill, animal,
+    prompt: touch ? "Touch each one, then choose how many." : "How many are there?",
+    equation: "",
+    first: quantity, second: 0, expectedAnswer: quantity,
+    answerChoices: smallAnswerChoices(quantity),
+    visualMode: "count-group", layout, requiresTouchCount: touch,
+  }
+}
+
+function subitiseQuestion(animal: AnimalType, questionNumber: number, totalQuestions: SessionLength): GameQuestion {
+  const quantity = quantityForPosition(questionNumber, totalQuestions, 4)
+  const band = progressionBand(questionNumber, totalQuestions)
+  const skill: QuestionSkill = band === "challenge" || questionNumber % 5 === 0
+    ? "subitise-peek"
+    : questionNumber % 4 === 0 ? "subitise-match" : "subitise-persistent"
+  const patternId = quantity === 1 ? "single" : quantity === 2 ? "pair" : quantity === 3 ? "triangle" : questionNumber % 2 === 0 ? "square" : "two-pairs"
+  return {
+    id: randomId(), level: "subitise-small-groups", skill, animal,
+    prompt: skill === "subitise-match" ? "Which group has the same number?" : "How many did you see?",
+    equation: "",
+    first: quantity, second: 0, expectedAnswer: quantity,
+    answerChoices: smallAnswerChoices(quantity, 1, 4),
+    visualMode: "subitise", layout: "structured", patternId,
+    displayMs: skill === "subitise-peek" ? 1400 : undefined,
+  }
+}
+
+function compareQuestion(animal: AnimalType, questionNumber: number, totalQuestions: SessionLength): GameQuestion {
+  const relationCycle = ["more", "fewer", "same"] as const
+  const relation = relationCycle[(questionNumber - 1) % relationCycle.length]
+  const left = quantityForPosition(questionNumber, totalQuestions)
+  let right = relation === "same" ? left : 1 + ((left + questionNumber + 1) % 5)
+  if (right === left && relation !== "same") right = left === 5 ? 4 : left + 1
+  const skill: QuestionSkill = relation === "more" ? "compare-more" : relation === "fewer" ? "compare-fewer" : "compare-same"
+  const expectedAnswer = relation === "same" ? 1 : relation === "more" ? Math.max(left, right) : Math.min(left, right)
+  return {
+    id: randomId(), level: "compare-quantities", skill, animal,
+    prompt: relation === "more" ? "Which group has more?" : relation === "fewer" ? "Which group has fewer?" : "Are these groups the same?",
+    equation: "", first: left, second: right, expectedAnswer,
+    answerChoices: relation === "same" ? [{ value: 1, label: "Same" }, { value: 0, label: "Different" }] : [],
+    visualMode: "compare-groups",
+    layout: questionNumber % 2 === 0 ? "different-spacing" : "aligned",
+    leftQuantity: left, rightQuantity: right, relation,
+  }
 }
 
 function levelOneQuestion(attempts: QuestionAttempt[], animal: AnimalType, questionNumber: number, totalQuestions: SessionLength, recentItemKeys: string[]): GameQuestion {
@@ -111,7 +194,7 @@ function levelOneQuestion(attempts: QuestionAttempt[], animal: AnimalType, quest
   const selected = chooseCandidate(candidates, attempts, sessionMode(questionNumber, totalQuestions), recentItemKeys)
   const missing = selected.skill === "bond-missing-second"
   return {
-    id: randomId(), level: 1, skill: selected.skill, animal,
+    id: randomId(), level: "make-10", skill: selected.skill, animal,
     prompt: missing ? "How many more make 10?" : "How many are there altogether?",
     equation: missing ? `${selected.first} + ? = 10` : `${selected.first} + ${selected.second} = ?`,
     first: selected.first, second: selected.second,
@@ -140,7 +223,7 @@ function levelTwoQuestion(attempts: QuestionAttempt[], animal: AnimalType, quest
   const missing = selected.skill === "teen-missing-ones"
   const count = selected.skill === "teen-count-total"
   return {
-    id: randomId(), level: 2, skill: selected.skill, animal,
+    id: randomId(), level: "teen-numbers", skill: selected.skill, animal,
     prompt: missing ? `${selected.teen} is 10 and how many more?` : count ? "How many are there altogether?" : "Which number is this?",
     equation: missing ? `10 + ? = ${selected.teen}` : `10 + ${selected.ones} = ?`,
     first: 10, second: selected.ones,
@@ -184,7 +267,7 @@ function levelThreeQuestion(attempts: QuestionAttempt[], animal: AnimalType, que
   const isSplit = selected.skill === "bridge-split"
 
   return {
-    id: randomId(), level: 3, skill: selected.skill, animal,
+    id: randomId(), level: "bridge-through-10", skill: selected.skill, animal,
     prompt: isMakeTen
       ? "Move animals to fill the ten-frame."
       : isSplit
@@ -212,7 +295,10 @@ export function generateQuestion(
   recentItemKeys: string[],
 ) {
   const animal = chooseAnimal(recentAnimals)
-  if (level === 1) return levelOneQuestion(attempts, animal, questionNumber, totalQuestions, recentItemKeys)
-  if (level === 2) return levelTwoQuestion(attempts, animal, questionNumber, totalQuestions, recentItemKeys)
+  if (level === "count-objects") return countQuestion(animal, questionNumber, totalQuestions)
+  if (level === "subitise-small-groups") return subitiseQuestion(animal, questionNumber, totalQuestions)
+  if (level === "compare-quantities") return compareQuestion(animal, questionNumber, totalQuestions)
+  if (level === "make-10") return levelOneQuestion(attempts, animal, questionNumber, totalQuestions, recentItemKeys)
+  if (level === "teen-numbers") return levelTwoQuestion(attempts, animal, questionNumber, totalQuestions, recentItemKeys)
   return levelThreeQuestion(attempts, animal, questionNumber, totalQuestions, recentItemKeys)
 }

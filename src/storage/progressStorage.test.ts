@@ -14,9 +14,9 @@ class MemoryStorage implements Storage {
 
 function gameData(updatedAt = "2026-07-20T00:00:00.000Z"): StoredGameData {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     appVersion: "0.1.0",
-    settings: { languagePriority: "english-first", showEnglish: true, showMaori: true, questionPresentation: "numbers", sessionLength: 10, updatedAt },
+    settings: { languagePriority: "english-first", showEnglish: true, showMaori: true, questionPresentation: "numbers", sessionLength: 10, numberSenseSessionLength: 8, updatedAt },
     sessions: [],
     attempts: [],
     activeSession: null,
@@ -42,7 +42,8 @@ describe("progress storage", () => {
 
     const loaded = loadData(GUEST_SCOPE)
 
-    expect(loaded.schemaVersion).toBe(2)
+    expect(loaded.schemaVersion).toBe(3)
+    expect(loaded.attempts[0].level).toBe("make-10")
     expect(loaded.attempts).toHaveLength(1)
     expect(loaded.attempts[0].activeDurationMs).toBe(300_000)
     expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull()
@@ -84,7 +85,7 @@ describe("progress storage", () => {
     const local = gameData("2026-07-20T00:00:00.000Z")
     const remote = gameData("2026-07-21T00:00:00.000Z")
     local.attempts.push({
-      id: "same", timestamp: "2026-07-20T00:00:00.000Z", sessionId: "s1", level: 1, skill: "bond-complete", itemKey: "x",
+      id: "same", timestamp: "2026-07-20T00:00:00.000Z", sessionId: "s1", level: "make-10", skill: "bond-complete", itemKey: "x",
       animal: "turtle", operands: [6, 4], expectedAnswer: 10, submittedAnswers: [10], correctOnFirstAttempt: true, hintsUsed: 0, activeDurationMs: 1000, responseMs: 1000,
     })
     remote.attempts.push(local.attempts[0], { ...local.attempts[0], id: "remote", timestamp: "2026-07-21T00:00:00.000Z" })

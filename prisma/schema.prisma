@@ -19,12 +19,13 @@ model LearnerProfile {
 }
 
 model LearnerSettings {
-  learnerProfileId     String   @id @map("learner_profile_id") @db.Uuid
-  showEnglish          Boolean  @default(true) @map("show_english")
-  showMaori            Boolean  @default(true) @map("show_maori")
-  questionPresentation String   @default("numbers") @map("question_presentation")
-  sessionLength        Int      @default(10) @map("session_length") @db.SmallInt
-  updatedAt            DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  learnerProfileId         String   @id @map("learner_profile_id") @db.Uuid
+  showEnglish              Boolean  @default(true) @map("show_english")
+  showMaori                Boolean  @default(true) @map("show_maori")
+  questionPresentation     String   @default("numbers") @map("question_presentation")
+  sessionLength            Int      @default(10) @map("session_length") @db.SmallInt
+  numberSenseSessionLength Int      @default(8) @map("number_sense_session_length") @db.SmallInt
+  updatedAt                DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   learnerProfile LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -34,7 +35,8 @@ model LearnerSettings {
 model LearningSession {
   id                 String    @id @db.Uuid
   learnerProfileId   String    @map("learner_profile_id") @db.Uuid
-  level              Int       @db.SmallInt
+  levelId            String    @map("level_id")
+  level              Int?      @db.SmallInt
   startedAt          DateTime  @map("started_at") @db.Timestamptz(6)
   endedAt            DateTime? @map("ended_at") @db.Timestamptz(6)
   status             String
@@ -57,7 +59,8 @@ model QuestionAttempt {
   learnerProfileId          String   @map("learner_profile_id") @db.Uuid
   sessionId                 String   @map("session_id") @db.Uuid
   occurredAt                DateTime @map("occurred_at") @db.Timestamptz(6)
-  level                     Int      @db.SmallInt
+  levelId                   String   @map("level_id")
+  level                     Int?     @db.SmallInt
   skill                     String
   itemKey                   String   @map("item_key")
   animal                    String

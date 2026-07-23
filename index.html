@@ -27,6 +27,14 @@
     <title>Kararehe Math</title>
   </head>
   <body>
+    <!-- Netlify detects forms at build time; the interactive version is rendered in the contact dialog. -->
+    <form name="contact" method="POST" data-netlify="true" netlify-honeypot="bot-field" hidden>
+      <input type="hidden" name="form-name" value="contact" />
+      <input name="bot-field" />
+      <input name="name" />
+      <input type="email" name="email" />
+      <textarea name="message"></textarea>
+    </form>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, BarChart3, Code2, Download, ExternalLink, Home, LogIn, Play, Settings, Sparkles, UserRound } from "lucide-react"
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { ArrowLeft, BarChart3, Code2, Download, ExternalLink, Home, LogIn, Mail, Play, Settings, Sparkles, UserRound } from "lucide-react"
 import { useAuth } from "@/auth/AuthContext"
 import { AuthDialog, GuestImportDialog, ProfileDialog, VerificationDialog } from "@/components/AccountDialogs"
 import { BilingualTerm, LanguageDisplayProvider } from "@/components/BilingualTerm"
@@ -27,8 +27,27 @@ import type {
   StoredGameData,
   LearnerProfile,
 } from "@/types/game"
+import { isNumberSenseLevel } from "@/types/game"
 
 type Screen = "home" | "game" | "complete" | "parent"
+
+const levelNames: Record<LevelId, string> = {
+  "count-objects": "Count the Kararehe",
+  "subitise-small-groups": "See the Number",
+  "compare-quantities": "More, Less, or Same",
+  "make-10": "Make 10",
+  "teen-numbers": "Build Teen Numbers",
+  "bridge-through-10": "Make 10 Then Add",
+}
+
+const levelNumbers: Record<LevelId, number> = {
+  "count-objects": 1,
+  "subitise-small-groups": 2,
+  "compare-quantities": 3,
+  "make-10": 1,
+  "teen-numbers": 2,
+  "bridge-through-10": 3,
+}
 
 function createSession(level: LevelId, attempts: QuestionAttempt[], totalQuestions: SessionLength): ActiveSession {
   const now = new Date().toISOString()
@@ -45,12 +64,14 @@ function createSession(level: LevelId, attempts: QuestionAttempt[], totalQuestio
     recentAnimalIds: [question.animal],
     recentItemKeys: [itemKey(question.skill, question.first, question.second)],
     submittedAnswers: [],
-    bridgeStage: level === 3 ? "partition" : undefined,
-    partitionSubmittedAnswers: level === 3 ? [] : undefined,
+    bridgeStage: level === "bridge-through-10" ? "partition" : undefined,
+    partitionSubmittedAnswers: level === "bridge-through-10" ? [] : undefined,
     hintsUsed: 0,
     feedbackState: "answering",
     selectedAnswer: null,
     activeLearningMs: 0,
+    touchedObjectIndexes: [],
+    duplicateTouchAttempts: 0,
   }
 }
 
@@ -63,6 +84,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>("home")
   const [pendingLevel, setPendingLevel] = useState<LevelId | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [contactOpen, setContactOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(Boolean(new URLSearchParams(window.location.search).get("token")))
   const [authStartMode, setAuthStartMode] = useState<"sign-in" | "sign-up">("sign-in")
   const [verificationOpen, setVerificationOpen] = useState(false)
@@ -161,7 +183,7 @@ function App() {
       }
       return
     }
-    setData((current) => ({ ...current, activeSession: createSession(level, current.attempts, current.settings.sessionLength) }))
+    setData((current) => ({ ...current, activeSession: createSession(level, current.attempts, isNumberSenseLevel(level) ? current.settings.numberSenseSessionLength : current.settings.sessionLength) }))
     setScreen("game")
   }
 
@@ -180,7 +202,7 @@ function App() {
             totalQuestions: active.totalQuestions,
           }]
         : current.sessions
-      return { ...current, sessions, activeSession: createSession(pendingLevel, current.attempts, current.settings.sessionLength) }
+      return { ...current, sessions, activeSession: createSession(pendingLevel, current.attempts, isNumberSenseLevel(pendingLevel) ? current.settings.numberSenseSessionLength : current.settings.sessionLength) }
     })
     setPendingLevel(null)
     setScreen("game")
@@ -190,7 +212,7 @@ function App() {
     setData((current) => {
       const active = current.activeSession
       if (!active || active.feedbackState === "correct") return current
-      if (active.level === 3 && active.bridgeStage !== "sum") {
+      if (active.level === "bridge-through-10" && active.bridgeStage !== "sum") {
         const partitionSubmittedAnswers = [...(active.partitionSubmittedAnswers ?? []), value]
         const partitionCorrect = value === 10 - active.currentQuestion.first
         const revealed = !partitionCorrect && partitionSubmittedAnswers.length >= 2
@@ -225,6 +247,18 @@ function App() {
     })
   }
 
+  const touchCountObject = (index: number) => {
+    setData((current) => {
+      const active = current.activeSession
+      if (!active || active.feedbackState === "correct" || active.currentQuestion.skill !== "touch-count") return current
+      const touched = active.touchedObjectIndexes ?? []
+      if (touched.includes(index)) {
+        return { ...current, activeSession: { ...active, duplicateTouchAttempts: (active.duplicateTouchAttempts ?? 0) + 1 } }
+      }
+      return { ...current, activeSession: { ...active, touchedObjectIndexes: [...touched, index] } }
+    })
+  }
+
   const nextQuestion = () => {
     const active = data.activeSession
     if (!active || active.feedbackState !== "correct") return
@@ -243,11 +277,20 @@ function App() {
       partitionSubmittedAnswers: active.partitionSubmittedAnswers,
       partitionCorrectOnFirstAttempt: active.partitionSubmittedAnswers?.length === 1,
       correctOnFirstAttempt: active.submittedAnswers.length === 1
-        && (active.level !== 3 || active.partitionSubmittedAnswers?.length === 1),
-      sumCorrectOnFirstAttempt: active.level === 3 ? active.submittedAnswers.length === 1 : undefined,
+        && (active.level !== "bridge-through-10" || active.partitionSubmittedAnswers?.length === 1),
+      sumCorrectOnFirstAttempt: active.level === "bridge-through-10" ? active.submittedAnswers.length === 1 : undefined,
       hintsUsed: active.hintsUsed,
       activeDurationMs: Math.min(300_000, active.activeLearningMs ?? Math.max(0, Date.parse(active.answeredAt ?? new Date().toISOString()) - Date.parse(active.questionStartedAt))),
       responseMs: Math.max(0, Date.parse(active.answeredAt ?? new Date().toISOString()) - Date.parse(active.questionStartedAt)),
+      layout: question.layout,
+      patternId: question.patternId,
+      displayMs: question.displayMs,
+      leftQuantity: question.leftQuantity,
+      rightQuantity: question.rightQuantity,
+      relation: question.relation,
+      objectsTouched: active.touchedObjectIndexes,
+      duplicateTouchAttempts: active.duplicateTouchAttempts,
+      completedCountingSequence: question.requiresTouchCount ? active.touchedObjectIndexes?.length === question.first : undefined,
     }
     const attempts = [...data.attempts, attempt]
     const completed = active.questionsCompleted + 1
@@ -285,12 +328,14 @@ function App() {
         recentAnimalIds: [...recent, next.animal].slice(-2),
         recentItemKeys: [...recentItems, itemKey(next.skill, next.first, next.second)].slice(-2),
         submittedAnswers: [],
-        bridgeStage: active.level === 3 ? "partition" : undefined,
-        partitionSubmittedAnswers: active.level === 3 ? [] : undefined,
+        bridgeStage: active.level === "bridge-through-10" ? "partition" : undefined,
+        partitionSubmittedAnswers: active.level === "bridge-through-10" ? [] : undefined,
         hintsUsed: 0,
         feedbackState: "answering",
         selectedAnswer: null,
         activeLearningMs: 0,
+        touchedObjectIndexes: [],
+        duplicateTouchAttempts: 0,
       },
     }))
   }
@@ -366,10 +411,11 @@ function App() {
             onBegin={beginLevel}
             onResume={() => setScreen("game")}
             onSignUp={() => { setAuthStartMode("sign-up"); setAuthOpen(true) }}
+            onContact={() => setContactOpen(true)}
           />
         )}
         {screen === "game" && data.activeSession && (
-          <GameScreen active={data.activeSession} priority={languagePriority} presentation={data.settings.questionPresentation} showNumberLabels={data.settings.showEnglish || data.settings.showMaori} onAnswer={answerQuestion} onNext={nextQuestion} onHome={() => setScreen("home")} />
+          <GameScreen active={data.activeSession} priority={languagePriority} presentation={data.settings.questionPresentation} showNumberLabels={data.settings.showEnglish || data.settings.showMaori} onAnswer={answerQuestion} onTouchObject={touchCountObject} onNext={nextQuestion} onHome={() => setScreen("home")} />
         )}
         {screen === "complete" && (
           <CompleteScreen data={data} sessionId={lastCompletedSessionId} priority={languagePriority} onHome={() => setScreen("home")} />
@@ -396,7 +442,11 @@ function App() {
           <DialogDescription>Choose the vocabulary and number format used in new and resumed questions.</DialogDescription>
           <div className="mt-6 space-y-6">
             <div className="flex items-center justify-between gap-4 rounded-2xl border-2 border-border p-4">
-              <div><strong>Session length</strong><p className="text-sm text-muted-foreground">Questions in each new session</p></div>
+              <div><strong>Number Sense sessions</strong><p className="text-sm text-muted-foreground">Questions in counting, seeing, and comparing sessions</p></div>
+              <SessionLengthControl value={data.settings.numberSenseSessionLength} options={[5, 8, 10]} label="Questions in each Number Sense session" onChange={(value) => updateSettings({ numberSenseSessionLength: value as 5 | 8 | 10 })} />
+            </div>
+            <div className="flex items-center justify-between gap-4 rounded-2xl border-2 border-border p-4">
+              <div><strong>Addition sessions</strong><p className="text-sm text-muted-foreground">Questions in each addition strategy session</p></div>
               <SessionLengthControl value={data.settings.sessionLength} onChange={setSessionLength} />
             </div>
             <fieldset>
@@ -419,6 +469,7 @@ function App() {
       </Dialog>
 
       <AuthDialog key={`${authStartMode}:${authOpen}`} open={authOpen} onOpenChange={setAuthOpen} initialMode={authStartMode} />
+      <ContactDialog key={contactOpen ? "contact-open" : "contact-closed"} open={contactOpen} onOpenChange={setContactOpen} initialEmail={auth.user?.email ?? ""} />
       <VerificationDialog open={verificationOpen} onOpenChange={setVerificationOpen} />
       <GuestImportDialog open={guestImportOpen} guestData={loadData(GUEST_SCOPE)} busy={guestImportBusy} onImport={() => void importGuestProgress()} onFresh={startFresh} />
       <ProfileDialog
@@ -462,19 +513,72 @@ function SettingsRadio({ label, value, selected, onChange }: { label: string; va
   )
 }
 
-function HomeScreen({ data, signedIn, onBegin, onResume, onSignUp }: {
+function ContactDialog({ open, onOpenChange, initialEmail }: { open: boolean; onOpenChange: (open: boolean) => void; initialEmail: string }) {
+  const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState("")
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setBusy(true)
+    setError("")
+    const formData = new FormData(event.currentTarget)
+    const body = new URLSearchParams()
+    formData.forEach((value, key) => body.append(key, String(value)))
+    try {
+      const response = await fetch("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      })
+      if (!response.ok) throw new Error("The message could not be sent. Please try again.")
+      setSent(true)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The message could not be sent. Please try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogTitle><span className="inline-flex items-center gap-2"><Mail className="size-5" /> Contact</span></DialogTitle>
+        <DialogDescription>{sent ? "Thanks for getting in touch." : "Share feedback, an idea, or something that could work better."}</DialogDescription>
+        {sent ? (
+          <div className="mt-6 space-y-4">
+            <p className="account-notice" role="status">Your message has been sent.</p>
+            <Button className="w-full" onClick={() => onOpenChange(false)}>Done</Button>
+          </div>
+        ) : (
+          <form className="account-form" name="contact" method="POST" data-netlify="true" netlify-honeypot="bot-field" onSubmit={submit}>
+            <input type="hidden" name="form-name" value="contact" />
+            <label className="hidden" aria-hidden="true">Do not fill this out<input name="bot-field" tabIndex={-1} autoComplete="off" /></label>
+            <label>Your name<input required name="name" maxLength={60} autoComplete="name" /></label>
+            <label>Email<input required name="email" type="email" maxLength={254} autoComplete="email" defaultValue={initialEmail} /></label>
+            <label>Message<textarea required name="message" minLength={10} maxLength={4000} rows={6} /></label>
+            {error && <p className="account-error" role="alert">{error}</p>}
+            <Button type="submit" disabled={busy}>{busy ? "Sending…" : "Send message"}</Button>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function HomeScreen({ data, signedIn, onBegin, onResume, onSignUp, onContact }: {
   data: StoredGameData
   signedIn: boolean
   onBegin: (level: LevelId) => void
   onResume: () => void
   onSignUp: () => void
+  onContact: () => void
 }) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
       <section className="hero-grid py-8 sm:py-14">
         <div>
           <h1 className="mt-4 max-w-3xl text-4xl font-black leading-[0.95] tracking-[-0.05em] text-balance sm:text-6xl">Helping tamariki become confident with numbers through play.</h1>
-          <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground sm:text-xl">Practise making 10, building teen numbers, and turning hard sums into easy sums with friendly kararehe.</p>
         </div>
         <div className="mx-auto flex flex-wrap gap-3 text-3xl pt-4" aria-label="Turtles, whales, tigers, cats, dogs, and penguins">
           {(["turtle", "whale", "tiger", "cat", "dog", "penguin"] as const).map((id) => <span key={id} className="animal-chip w-24 h-24 text-5xl" aria-hidden="true">{getAnimal(id).emoji}</span>)}
@@ -486,7 +590,7 @@ function HomeScreen({ data, signedIn, onBegin, onResume, onSignUp }: {
         <Card className="mb-6 border-accent/40 bg-accent/8">
           <CardContent className="flex flex-col items-start gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-black">Your Level {data.activeSession.level} session is waiting</p>
+              <p className="font-black">Your {levelNames[data.activeSession.level]} session is waiting</p>
               <p className="text-sm text-muted-foreground">Question {data.activeSession.questionsCompleted + 1} of {data.activeSession.totalQuestions}</p>
             </div>
             <Button onClick={onResume}><Play className="size-5 fill-current" /> Resume</Button>
@@ -494,11 +598,26 @@ function HomeScreen({ data, signedIn, onBegin, onResume, onSignUp }: {
         </Card>
       )}
 
-      <div className="level-grid grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        <LevelCard level={1} title="Make 10" subtitle="Find the friends that make ten." emoji="🐢" description="Practise pairs such as 6 and 4, or 7 and 3." onClick={() => onBegin(1)} />
-        <LevelCard level={2} title="Build Teen Numbers" subtitle="Build numbers from one full ten and some extra ones." emoji="🐋" description="Build 11 to 19 from one full group of ten and loose ones." onClick={() => onBegin(2)} />
-        <LevelCard level={3} title="Make 10 Then Add" subtitle="Make bigger sums easier." emoji="🐕" description="Fill ten first, then add the animals left over." onClick={() => onBegin(3)} />
-      </div>
+      <section aria-labelledby="number-sense-heading">
+        <p className="eyebrow">Start here Lenny</p>
+        <h2 id="number-sense-heading" className="mt-2 text-3xl font-black">Number Sense</h2>
+        <p className="mt-2 mb-5 text-muted-foreground">Learn to recognise and compare small quantities before using equations.</p>
+        <div className="level-grid grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          <LevelCard level="count-objects" title="Count the Kararehe" subtitle="Count one object at a time." emoji="🐧" description="Count groups from 1 to 5 in tidy and scattered layouts." onClick={() => onBegin("count-objects")} />
+          <LevelCard level="subitise-small-groups" title="See the Number" subtitle="See small groups without counting." emoji="🐯" description="Recognise deliberate patterns of 1 to 4 at a glance." onClick={() => onBegin("subitise-small-groups")} />
+          <LevelCard level="compare-quantities" title="More, Less, or Same" subtitle="Compare two small groups." emoji="🐱" description="Decide which group has more, fewer, or the same amount." onClick={() => onBegin("compare-quantities")} />
+        </div>
+      </section>
+      <section className="mt-12" aria-labelledby="addition-heading">
+        <p className="eyebrow">Keep going Frankie</p>
+        <h2 id="addition-heading" className="mt-2 text-3xl font-black">Addition Strategies</h2>
+        <p className="mt-2 mb-5 text-muted-foreground">All three strategies remain available whenever the learner is ready.</p>
+        <div className="level-grid grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          <LevelCard level="make-10" title="Make 10" subtitle="Find the friends that make ten." emoji="🐢" description="Practise pairs such as 6 and 4, or 7 and 3." onClick={() => onBegin("make-10")} />
+          <LevelCard level="teen-numbers" title="Build Teen Numbers" subtitle="One ten and some ones." emoji="🐋" description="Build 11 to 19 from one full group of ten and loose ones." onClick={() => onBegin("teen-numbers")} />
+          <LevelCard level="bridge-through-10" title="Make 10 Then Add" subtitle="Turn hard sums into easy sums." emoji="🐕" description="Fill ten first, then add the animals left over." onClick={() => onBegin("bridge-through-10")} />
+        </div>
+      </section>
       {!signedIn && (
         <section className="mt-12 overflow-hidden rounded-[2rem] border-2 border-primary/20 bg-primary/6 p-6 sm:p-9" aria-labelledby="account-benefits-title">
           <div className="max-w-3xl">
@@ -531,11 +650,16 @@ function HomeScreen({ data, signedIn, onBegin, onResume, onSignUp }: {
           <p className="eyebrow">About this project</p>
           <h2 id="about-title" className="mt-3 text-2xl font-black tracking-[-0.025em] sm:text-3xl">Made for practising maths at home.</h2>
           <p className="mt-3 leading-relaxed text-muted-foreground">Kararehe Math is a small, open-source maths game made by Frankie and <a className="font-bold text-primary underline decoration-primary/35 underline-offset-4 hover:decoration-primary" href="https://www.carlaiau.com" target="_blank" rel="noreferrer">Carl</a>.</p>
-          <a className="mt-auto inline-flex w-fit items-center gap-2 pt-7 font-bold text-primary underline decoration-primary/35 underline-offset-4 transition-colors hover:decoration-primary focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/35" href="https://github.com/carlaiau/kararehe-math" target="_blank" rel="noreferrer">
-            <Code2 className="size-5 shrink-0" aria-hidden="true" />
-            <span>View and contribute on GitHub</span>
-            <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </a>
+          <div className="mt-auto flex flex-wrap items-center gap-x-6 gap-y-3 pt-7">
+            <a className="inline-flex w-fit items-center gap-2 font-bold text-primary underline decoration-primary/35 underline-offset-4 transition-colors hover:decoration-primary focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/35" href="https://github.com/carlaiau/kararehe-math" target="_blank" rel="noreferrer">
+              <Code2 className="size-5 shrink-0" aria-hidden="true" />
+              <span>View and contribute on GitHub</span>
+              <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </a>
+            <button className="inline-flex items-center gap-2 font-bold text-primary underline decoration-primary/35 underline-offset-4 hover:decoration-primary focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/35" type="button" onClick={onContact}>
+              <Mail className="size-5" aria-hidden="true" /> Contact
+            </button>
+          </div>
         </div>
         <div className="h-full rounded-2xl border-2 border-secondary/45 bg-secondary/12 p-5">
           <strong>Educational note</strong>
@@ -546,7 +670,7 @@ function HomeScreen({ data, signedIn, onBegin, onResume, onSignUp }: {
   )
 }
 
-function LevelCard({ level, title, subtitle, emoji, description, onClick }: { level: LevelId; title: string; subtitle: string; emoji: string; description: string; onClick: () => void }) {
+function LevelCard({ title, subtitle, emoji, description, onClick }: { level: LevelId; title: string; subtitle: string; emoji: string; description: string; onClick: () => void }) {
   return (
     <Card className="level-card group">
       <CardHeader className="level-card-header flex flex-row items-start justify-between gap-4">
@@ -558,25 +682,190 @@ function LevelCard({ level, title, subtitle, emoji, description, onClick }: { le
       </CardHeader>
       <CardContent className="level-card-content">
         <p className="level-card-description leading-relaxed text-muted-foreground">{description}</p>
-        <Button size="lg" className="level-card-action w-full" onClick={onClick} aria-label={`Start Level ${level}`}>Start <Play className="size-5 fill-current" /></Button>
+        <Button size="lg" className="level-card-action w-full" onClick={onClick} aria-label={`Start ${title}`}>Start <Play className="size-5 fill-current" /></Button>
       </CardContent>
     </Card>
   )
 }
 
-function GameScreen({ active, priority, presentation, showNumberLabels, onAnswer, onNext, onHome }: {
+function GameScreen(props: {
   active: ActiveSession
   priority: LanguagePriority
   presentation: QuestionPresentation
   showNumberLabels: boolean
   onAnswer: (answer: number) => void
+  onTouchObject: (index: number) => void
+  onNext: () => void
+  onHome: () => void
+}) {
+  return isNumberSenseLevel(props.active.level)
+    ? <NumberSenseGameScreen key={props.active.currentQuestion.id} {...props} />
+    : <AdditionGameScreen {...props} />
+}
+
+function NumberSenseGameScreen({ active, priority, presentation, onAnswer, onTouchObject, onNext, onHome }: {
+  active: ActiveSession
+  priority: LanguagePriority
+  presentation: QuestionPresentation
+  showNumberLabels: boolean
+  onAnswer: (answer: number) => void
+  onTouchObject: (index: number) => void
   onNext: () => void
   onHome: () => void
 }) {
   const question = active.currentQuestion
-  const animal = animalTerm(question.animal, question.level === 1 ? 10 : question.first + question.second, priority)
+  const animal = getAnimal(question.animal)
+  const names = animalTerm(question.animal, question.first, priority)
   const correct = active.feedbackState === "correct"
-  const isBridge = question.level === 3
+  const revealed = active.feedbackState === "revealed"
+  const touched = active.touchedObjectIndexes ?? []
+  const countingReady = !question.requiresTouchCount || touched.length === question.first
+  const [covered, setCovered] = useState(false)
+
+  useEffect(() => {
+    if (!question.displayMs) return
+    const timeout = window.setTimeout(() => setCovered(true), question.displayMs)
+    return () => window.clearTimeout(timeout)
+  }, [question.id, question.displayMs])
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (correct && (event.key === "Enter" || event.key === " ")) onNext()
+      if (!correct && countingReady && /^[0-9]$/.test(event.key)) {
+        const value = Number(event.key)
+        if (question.answerChoices.some((choice) => choice.value === value)) onAnswer(value)
+      }
+    }
+    window.addEventListener("keydown", handleKey)
+    return () => window.removeEventListener("keydown", handleKey)
+  }, [correct, countingReady, onAnswer, onNext, question.answerChoices])
+
+  const teReoPrompt = question.level === "count-objects"
+    ? "E hia?"
+    : question.level === "subitise-small-groups"
+      ? "E hia ngā mea i kitea e koe?"
+      : question.relation === "more" ? "Ko tēhea te nui ake?" : question.relation === "fewer" ? "Ko tēhea te iti ake?" : "He ōrite rānei?"
+
+  const answerButton = (value: number, label: ReactNode, isWordAnswer = false) => {
+    const selected = active.submittedAnswers.includes(value)
+    const isCorrect = correct && value === question.expectedAnswer
+    return (
+      <button
+        key={value}
+        className={`answer-button number-sense-answer ${isWordAnswer ? "number-sense-word-answer" : ""} ${selected ? "answer-selected" : ""} ${isCorrect ? "answer-correct" : ""}`}
+        onClick={() => isCorrect ? onNext() : onAnswer(value)}
+        disabled={!countingReady || (correct && !isCorrect)}
+        aria-label={isCorrect ? `${typeof label === "string" ? label : value}, correct. Continue` : String(typeof label === "string" ? label : value)}
+      >
+        <span>{label}</span>
+        {isCorrect && <span className="answer-next-caret" aria-hidden="true"><Play className="size-5 fill-current" /></span>}
+      </button>
+    )
+  }
+
+  return (
+    <div className="game-screen number-sense-screen mx-auto max-w-4xl animate-in fade-in pt-4 duration-300 sm:pt-6">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <Button variant="ghost" onClick={onHome}><img className="brand-mark game-home-mark" src="/icon-192.png" alt="" /> Home</Button>
+        <p className="font-bold text-muted-foreground">Question {active.questionsCompleted + 1} of {active.totalQuestions}</p>
+      </div>
+      <Progress value={(active.questionsCompleted / active.totalQuestions) * 100} />
+      <Card className="game-card mt-5 overflow-hidden">
+        <CardHeader className="question-header text-center">
+          <p className="text-sm font-black uppercase tracking-[0.16em] text-accent">Number Sense · Level {levelNumbers[active.level]}</p>
+          <h1 className="mt-3 text-3xl font-black sm:text-4xl">{question.prompt}</h1>
+          <p className="mt-1 font-bold text-muted-foreground">{teReoPrompt}</p>
+          <p className="mt-3 text-sm font-bold text-muted-foreground"><BilingualTerm term={names} className="animal-name-term" /></p>
+        </CardHeader>
+        <CardContent className="number-sense-content">
+          {question.level === "count-objects" && (
+            <div className={`number-object-field ${question.layout === "scattered" ? "number-object-scattered" : "number-object-structured"}`} aria-label={`${question.first} ${names.primary}`}>
+              {Array.from({ length: question.first }, (_, index) => (
+                <button
+                  type="button"
+                  className={`count-object count-object-${index + 1} ${touched.includes(index) ? "count-object-touched" : ""}`}
+                  key={index}
+                  onClick={() => onTouchObject(index)}
+                  disabled={!question.requiresTouchCount || correct}
+                  aria-label={question.requiresTouchCount ? `${touched.includes(index) ? "Counted" : "Count"} ${names.primary}` : undefined}
+                >
+                  <span aria-hidden="true">{animal.emoji}</span>
+                  {(touched.includes(index) || revealed) && <small aria-hidden="true">{index + 1}</small>}
+                </button>
+              ))}
+            </div>
+          )}
+          {question.level === "subitise-small-groups" && (
+            <div className={`subitise-stage ${covered ? "subitise-covered" : ""}`}>
+              {covered ? <div className="subitise-cover" aria-label="The group is now covered"><span>What did you see?</span><button type="button" onClick={() => setCovered(false)}>Peek again</button></div> : <ObjectPattern emoji={animal.emoji} quantity={question.first} patternId={question.patternId} />}
+            </div>
+          )}
+          {question.level === "compare-quantities" && (
+            <div className={`compare-stage ${question.layout === "different-spacing" ? "compare-different-spacing" : ""}`}>
+              <button type="button" className={`compare-group ${correct && question.expectedAnswer === (question.leftQuantity ?? question.first) ? "compare-group-correct" : ""}`} onClick={() => correct && question.expectedAnswer === (question.leftQuantity ?? question.first) ? onNext() : onAnswer(question.leftQuantity ?? question.first)} disabled={question.skill === "compare-same" || (correct && question.expectedAnswer !== (question.leftQuantity ?? question.first))} aria-label={`Left group: ${question.leftQuantity} ${names.primary}`}>
+                <ObjectPattern emoji={animal.emoji} quantity={question.leftQuantity ?? question.first} />
+                {correct && question.expectedAnswer === (question.leftQuantity ?? question.first) && <span className="answer-next-caret" aria-hidden="true"><Play className="size-5 fill-current" /></span>}
+              </button>
+              <span className="compare-divider" aria-hidden="true">or</span>
+              <button type="button" className={`compare-group ${correct && question.expectedAnswer === (question.rightQuantity ?? question.second) ? "compare-group-correct" : ""}`} onClick={() => correct && question.expectedAnswer === (question.rightQuantity ?? question.second) ? onNext() : onAnswer(question.rightQuantity ?? question.second)} disabled={question.skill === "compare-same" || (correct && question.expectedAnswer !== (question.rightQuantity ?? question.second))} aria-label={`Right group: ${question.rightQuantity} ${names.primary}`}>
+                <ObjectPattern emoji={animal.emoji} quantity={question.rightQuantity ?? question.second} />
+                {correct && question.expectedAnswer === (question.rightQuantity ?? question.second) && <span className="answer-next-caret" aria-hidden="true"><Play className="size-5 fill-current" /></span>}
+              </button>
+            </div>
+          )}
+
+          {question.requiresTouchCount && !countingReady && <p className="number-sense-instruction">Touch each {names.primary} once. The answer choices will appear when every one has been counted.</p>}
+          {question.requiresTouchCount && countingReady && !correct && <p className="number-sense-instruction">You counted {touched.length}. Now choose the number.</p>}
+
+          {question.level === "compare-quantities" && question.skill !== "compare-same" ? (
+            <p className="number-sense-instruction">Tap the group that has {question.relation}.</p>
+          ) : (
+            <div className={`answer-grid number-sense-answer-grid ${question.skill === "subitise-match" ? "pattern-answer-grid" : ""} ${question.skill === "compare-same" ? "compare-choice-grid" : ""}`} aria-label="Answer choices">
+              {question.answerChoices.map((choice) => answerButton(choice.value,
+                question.skill === "subitise-match"
+                  ? <ObjectPattern emoji={animal.emoji} quantity={choice.value} compact />
+                  : question.skill === "compare-same"
+                    ? choice.label
+                    : presentation === "numbers" ? choice.label : questionNumber(choice.value, presentation),
+                question.skill === "compare-same",
+              ))}
+            </div>
+          )}
+
+          {active.feedbackState === "incorrect" && <div className="feedback feedback-warn" role="status"><span aria-hidden="true">👀</span><div><strong>Have another look.</strong><p>Try once more.</p></div></div>}
+          {revealed && <div className="feedback feedback-warn" role="status"><span aria-hidden="true">🌱</span><div><strong>Let’s make it visible.</strong><p>{question.level === "compare-quantities" ? "Match one animal from each group. The group with animals left over has more." : `Count slowly: ${Array.from({ length: question.first }, (_, index) => index + 1).join(", ")}.`}</p></div></div>}
+        </CardContent>
+      </Card>
+      <div className="confirmation-area">
+        {correct && <div className="feedback feedback-good" role="status"><span aria-hidden="true">🌿</span><div><strong>Ka pai! That’s it.</strong><p>{question.level === "compare-quantities" ? question.prompt.replace("?", ".") : `There are ${question.expectedAnswer} ${names.primary}.`}</p></div></div>}
+        {correct && <Button size="lg" className="next-button mt-5 w-full sm:mx-auto sm:flex sm:w-56" onClick={onNext}>Next <Play className="size-5 fill-current" /></Button>}
+      </div>
+    </div>
+  )
+}
+
+function ObjectPattern({ emoji, quantity, patternId, compact = false }: { emoji: string; quantity: number; patternId?: string; compact?: boolean }) {
+  return (
+    <span className={`object-pattern object-pattern-${quantity} ${patternId ? `object-pattern-${patternId}` : ""} ${compact ? "object-pattern-compact" : ""}`} aria-hidden="true">
+      {Array.from({ length: quantity }, (_, index) => <span key={index}>{emoji}</span>)}
+    </span>
+  )
+}
+
+function AdditionGameScreen({ active, priority, presentation, showNumberLabels, onAnswer, onNext, onHome }: {
+  active: ActiveSession
+  priority: LanguagePriority
+  presentation: QuestionPresentation
+  showNumberLabels: boolean
+  onAnswer: (answer: number) => void
+  onTouchObject: (index: number) => void
+  onNext: () => void
+  onHome: () => void
+}) {
+  const question = active.currentQuestion
+  const animal = animalTerm(question.animal, question.level === "make-10" ? 10 : question.first + question.second, priority)
+  const correct = active.feedbackState === "correct"
+  const isBridge = question.level === "bridge-through-10"
   const bridgeStage = active.bridgeStage ?? "partition"
   const partitionComplete = isBridge && bridgeStage === "sum"
   const isMissingBond = question.skill === "bond-missing-second"
@@ -591,7 +880,7 @@ function GameScreen({ active, priority, presentation, showNumberLabels, onAnswer
       : `${question.first} + ${question.second} = ?`
     : question.equation
   const added = isMissingBond && demonstrated ? active.selectedAnswer ?? 0 : question.skill === "bond-complete" ? question.second : 0
-  const filled = question.level === 1 ? question.first : 10
+  const filled = question.level === "make-10" ? question.first : 10
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -618,7 +907,7 @@ function GameScreen({ active, priority, presentation, showNumberLabels, onAnswer
 
       <Card className="game-card mt-5 overflow-hidden">
         <CardHeader className="question-header text-center">
-          <p className="text-sm font-black uppercase tracking-[0.16em] text-accent">Level {active.level}</p>
+          <p className="text-sm font-black uppercase tracking-[0.16em] text-accent">Addition strategies · Level {levelNumbers[active.level]}</p>
           <h1 className="mt-3 text-2xl font-black sm:text-3xl">{isBridge
             ? question.skill === "bridge-missing-addend"
               ? <>How many more <BilingualTerm term={animal} className="animal-name-term" /> make {questionNumber(question.first + question.second, presentation)}?</>
@@ -676,7 +965,7 @@ function GameScreen({ active, priority, presentation, showNumberLabels, onAnswer
         </CardContent>
       </Card>
       <div className="confirmation-area">
-        {demonstrated && question.level === 2 && (
+        {demonstrated && question.level === "teen-numbers" && (
           <p className="teaching-summary">One ten and {question.second} more make {question.first + question.second}.</p>
         )}
         <Feedback active={active} priority={priority} presentation={presentation} />
@@ -735,7 +1024,7 @@ function promptWithAnimal(question: GameQuestion, animal: ReturnType<typeof anim
 function QuestionVisual({ question, filled, added, priority, bridgeStage }: { question: GameQuestion; filled: number; added: number; priority: LanguagePriority; bridgeStage: "partition" | "sum" }) {
   const animal = getAnimal(question.animal)
   const names = animalTerm(question.animal, question.first + question.second, priority)
-  if (question.level === 3) {
+  if (question.level === "bridge-through-10") {
     const toTen = 10 - question.first
     const remainder = question.second - toTen
     if (bridgeStage === "sum") {
@@ -766,7 +1055,7 @@ function QuestionVisual({ question, filled, added, priority, bridgeStage }: { qu
       </div>
     )
   }
-  if (question.level === 1) {
+  if (question.level === "make-10") {
     if (question.skill === "bond-complete") {
       return (
         <div
@@ -862,15 +1151,15 @@ function EmojiGroup({ emoji, quantity }: { emoji: string; quantity: number }) {
 function Feedback({ active, priority, presentation }: { active: ActiveSession; priority: LanguagePriority; presentation: QuestionPresentation }) {
   const question = active.currentQuestion
   if (active.feedbackState === "answering") {
-    if (question.level === 3 && active.bridgeStage === "sum") return null
-    const instruction = question.level === 3
+    if (question.level === "bridge-through-10" && active.bridgeStage === "sum") return null
+    const instruction = question.level === "bridge-through-10"
       ? "Choose how many fit into ten."
       : "Choose the answer that feels right."
     return <p className="mt-5 min-h-14 text-center text-muted-foreground">{instruction}</p>
   }
   const animal = animalTerm(question.animal, question.expectedAnswer, priority)
   if (active.feedbackState === "correct") {
-    const equation = question.level === 3 && question.skill !== "bridge-missing-addend"
+    const equation = question.level === "bridge-through-10" && question.skill !== "bridge-missing-addend"
       ? `${question.first} + ${question.second} = ${question.first + question.second}`
       : question.equation.replace("?", String(question.expectedAnswer))
     return (
@@ -881,7 +1170,7 @@ function Feedback({ active, priority, presentation }: { active: ActiveSession; p
     )
   }
   if (active.feedbackState === "revealed") {
-    const expected = question.level === 3 && active.bridgeStage !== "sum"
+    const expected = question.level === "bridge-through-10" && active.bridgeStage !== "sum"
       ? 10 - question.first
       : question.expectedAnswer
     const displayedExpected = questionNumber(expected, presentation)
@@ -897,9 +1186,9 @@ function Feedback({ active, priority, presentation }: { active: ActiveSession; p
   return (
     <div className="feedback feedback-try" role="status">
       <span className="text-2xl" aria-hidden="true">🌱</span>
-      <div><strong>Have another look.</strong><p>{question.level === 1
+      <div><strong>Have another look.</strong><p>{question.level === "make-10"
         ? `That makes ${questionNumber(total, presentation)}. We need ${question.skill === "bond-complete" ? questionNumber(10, presentation) : "a full ten"}.`
-        : question.level === 2
+        : question.level === "teen-numbers"
           ? `Here is one group of ${questionNumber(10, presentation)} and ${questionNumber(question.second, presentation)} more ${animal.primary}.`
           : active.bridgeStage === "sum"
             ? question.skill === "bridge-missing-addend"
@@ -914,6 +1203,7 @@ function CompleteScreen({ data, sessionId, priority, onHome }: { data: StoredGam
   const attempts = data.attempts.filter((attempt) => attempt.sessionId === sessionId)
   const firstTry = attempts.filter((attempt) => attempt.correctOnFirstAttempt).length
   const animalsHelped = new Set(attempts.map((attempt) => attempt.animal)).size
+  const level = attempts[0]?.level
   return (
     <div className="mx-auto max-w-2xl py-8 text-center sm:py-16">
       <div className="celebration" aria-hidden="true">🐢 <span>🌿</span> 🐧</div>
@@ -925,7 +1215,7 @@ function CompleteScreen({ data, sessionId, priority, onHome }: { data: StoredGam
           <div className="summary-stat"><strong>{attempts.length}</strong><span>questions explored</span></div>
           <div className="summary-stat"><strong>{firstTry}</strong><span>found on the first try</span></div>
           <div className="summary-stat"><strong>{animalsHelped}</strong><span>kinds of kararehe helped</span></div>
-          <div className="summary-stat"><strong><BilingualTerm term={numberTerm(10, priority)} /></strong><span>a full group of ten</span></div>
+          <div className="summary-stat"><strong>{level ? levelNames[level] : <BilingualTerm term={numberTerm(10, priority)} />}</strong><span>practice completed</span></div>
         </CardContent>
       </Card>
       <Button size="lg" className="mt-8" onClick={onHome}><Home className="size-5" /> Back home</Button>
@@ -942,7 +1232,8 @@ function ParentScreen({ data, cloudEnabled, onBack, onExport }: { data: StoredGa
     return { attempts: attempts.length, accuracy: attempts.length ? Math.round((firstTry / attempts.length) * 100) : 0, hints, average }
   }, [data.attempts])
   const recent = [...data.attempts].slice(-8).reverse()
-  const levelThreeAttempts = data.attempts.filter((attempt) => attempt.level === 3)
+  const levelThreeAttempts = data.attempts.filter((attempt) => attempt.level === "bridge-through-10")
+  const numberSenseAttempts = data.attempts.filter((attempt) => isNumberSenseLevel(attempt.level))
   return (
     <div className="mx-auto max-w-5xl py-4 sm:py-8">
       <Button variant="ghost" onClick={onBack}><ArrowLeft className="size-5" /> Back</Button>
@@ -956,6 +1247,7 @@ function ParentScreen({ data, cloudEnabled, onBack, onExport }: { data: StoredGa
         <Metric label="Hints used" value={String(metrics.hints)} />
         <Metric label="Average response" value={`${metrics.average.toFixed(1)}s`} />
       </div>
+      <NumberSenseProgress attempts={numberSenseAttempts} />
       {levelThreeAttempts.length > 0 && <LevelThreeProgress attempts={levelThreeAttempts} />}
       <Card className="mt-6 overflow-hidden">
         <CardHeader><h2 className="text-2xl font-black">Recent practice</h2></CardHeader>
@@ -963,12 +1255,34 @@ function ParentScreen({ data, cloudEnabled, onBack, onExport }: { data: StoredGa
           {recent.length === 0 ? <p className="px-6 pb-6 text-muted-foreground sm:px-8">No questions answered yet. Learning history will appear here.</p> : (
             <table className="w-full min-w-[620px] text-left">
               <thead><tr><th>Practice item</th><th>Level</th><th>First try</th><th>Hints</th><th>Time</th></tr></thead>
-              <tbody>{recent.map((attempt) => <tr key={attempt.id}><td className="font-bold">{attempt.itemKey.replaceAll(":", " · ")}</td><td>{attempt.level}</td><td>{attempt.correctOnFirstAttempt ? "Yes" : "Not yet"}</td><td>{attempt.hintsUsed}</td><td>{((attempt.activeDurationMs ?? Math.min(300_000, attempt.responseMs)) / 1000).toFixed(1)}s</td></tr>)}</tbody>
+              <tbody>{recent.map((attempt) => <tr key={attempt.id}><td className="font-bold">{attempt.itemKey.replaceAll(":", " · ")}</td><td>{levelNames[attempt.level]}</td><td>{attempt.correctOnFirstAttempt ? "Yes" : "Not yet"}</td><td>{attempt.hintsUsed}</td><td>{((attempt.activeDurationMs ?? Math.min(300_000, attempt.responseMs)) / 1000).toFixed(1)}s</td></tr>)}</tbody>
             </table>
           )}
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function NumberSenseProgress({ attempts }: { attempts: QuestionAttempt[] }) {
+  const levels = [
+    { id: "count-objects" as const, label: "Counting small groups" },
+    { id: "subitise-small-groups" as const, label: "Seeing groups at a glance" },
+    { id: "compare-quantities" as const, label: "Comparing quantities" },
+  ]
+  return (
+    <Card className="mt-6">
+      <CardHeader><h2 className="text-2xl font-black">Number Sense</h2><p className="text-muted-foreground">A calm summary of recent practice, without grades or ranking.</p></CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-3">
+        {levels.map(({ id, label }) => {
+          const matching = attempts.filter((attempt) => attempt.level === id)
+          const recent = matching.slice(-8)
+          const successes = recent.filter((attempt) => attempt.correctOnFirstAttempt).length
+          const status = matching.length === 0 ? "Not started" : matching.length < 4 ? "Learning" : successes >= Math.min(6, recent.length) ? "Secure" : "Developing"
+          return <div className="summary-stat" key={id}><strong>{status}</strong><span>{label} · {matching.length} attempts</span></div>
+        })}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -987,7 +1301,7 @@ function LevelThreeProgress({ attempts }: { attempts: QuestionAttempt[] }) {
   ]
   return (
     <Card className="mt-6">
-      <CardHeader><h2 className="text-2xl font-black">Level 3 strategies</h2></CardHeader>
+      <CardHeader><h2 className="text-2xl font-black">Make 10 Then Add strategies</h2></CardHeader>
       <CardContent className="space-y-5">
         {rows.map((row) => {
           const matching = attempts.filter(row.matches)

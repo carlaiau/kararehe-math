@@ -1,8 +1,26 @@
-export type LevelId = 1 | 2 | 3
+export type NumberSenseLevelId = "count-objects" | "subitise-small-groups" | "compare-quantities"
+export type AdditionLevelId = "make-10" | "teen-numbers" | "bridge-through-10"
+export type LevelId = NumberSenseLevelId | AdditionLevelId
+
+export const NUMBER_SENSE_LEVELS: NumberSenseLevelId[] = ["count-objects", "subitise-small-groups", "compare-quantities"]
+export const ADDITION_LEVELS: AdditionLevelId[] = ["make-10", "teen-numbers", "bridge-through-10"]
+
+export function isNumberSenseLevel(level: LevelId): level is NumberSenseLevelId {
+  return NUMBER_SENSE_LEVELS.includes(level as NumberSenseLevelId)
+}
+
+export function legacyLevelId(level: unknown): LevelId | null {
+  if (level === 1 || level === "1") return "make-10"
+  if (level === 2 || level === "2") return "teen-numbers"
+  if (level === 3 || level === "3") return "bridge-through-10"
+  return [...NUMBER_SENSE_LEVELS, ...ADDITION_LEVELS].includes(level as LevelId) ? level as LevelId : null
+}
 
 export type LanguagePriority = "english-first" | "maori-first"
 export type QuestionPresentation = "numbers" | "english-words" | "maori-words"
-export type SessionLength = 10 | 20 | 30
+export type NumberSenseSessionLength = 5 | 8 | 10
+export type AdditionSessionLength = 10 | 20 | 30
+export type SessionLength = NumberSenseSessionLength | AdditionSessionLength
 
 export type AnimalType =
   | "turtle"
@@ -13,6 +31,14 @@ export type AnimalType =
   | "penguin"
 
 export type QuestionSkill =
+  | "count-choose"
+  | "touch-count"
+  | "subitise-persistent"
+  | "subitise-peek"
+  | "subitise-match"
+  | "compare-more"
+  | "compare-fewer"
+  | "compare-same"
   | "bond-complete"
   | "bond-missing-second"
   | "teen-count-total"
@@ -40,7 +66,14 @@ export interface GameQuestion {
   second: number
   expectedAnswer: number
   answerChoices: AnswerChoice[]
-  visualMode: "ten-frame" | "full-ten-plus-ones" | "bridge" | "equation-only"
+  visualMode: "count-group" | "subitise" | "compare-groups" | "ten-frame" | "full-ten-plus-ones" | "bridge" | "equation-only"
+  layout?: "structured" | "scattered" | "aligned" | "different-spacing"
+  patternId?: string
+  displayMs?: number
+  leftQuantity?: number
+  rightQuantity?: number
+  relation?: "more" | "fewer" | "same" | "different"
+  requiresTouchCount?: boolean
 }
 
 export interface QuestionAttempt {
@@ -61,6 +94,15 @@ export interface QuestionAttempt {
   hintsUsed: number
   activeDurationMs: number
   responseMs: number
+  layout?: GameQuestion["layout"]
+  patternId?: string
+  displayMs?: number
+  leftQuantity?: number
+  rightQuantity?: number
+  relation?: GameQuestion["relation"]
+  objectsTouched?: number[]
+  duplicateTouchAttempts?: number
+  completedCountingSequence?: boolean
 }
 
 export interface GameSession {
@@ -93,10 +135,12 @@ export interface ActiveSession {
   feedbackState: FeedbackState
   selectedAnswer: number | null
   activeLearningMs?: number
+  touchedObjectIndexes?: number[]
+  duplicateTouchAttempts?: number
 }
 
 export interface StoredGameData {
-  schemaVersion: 2
+  schemaVersion: 3
   appVersion: string
   settings: {
     languagePriority: LanguagePriority
@@ -104,6 +148,7 @@ export interface StoredGameData {
     showMaori: boolean
     questionPresentation: QuestionPresentation
     sessionLength: SessionLength
+    numberSenseSessionLength: NumberSenseSessionLength
     updatedAt: string
   }
   sessions: GameSession[]

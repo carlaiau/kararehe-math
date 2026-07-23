@@ -1,6 +1,6 @@
 import { neon } from "@/services/neon"
-import { initialData, mergeLearningData, normalizeSessionLength } from "@/storage/progressStorage"
-import type { AuthUser, GameSession, LearnerProfile, QuestionAttempt, StoredGameData } from "@/types/game"
+import { initialData, mergeLearningData, normalizeAdditionSessionLength, normalizeNumberSenseSessionLength, normalizeSessionLength } from "@/storage/progressStorage"
+import { isNumberSenseLevel, legacyLevelId, type AuthUser, type GameSession, type LearnerProfile, type LevelId, type QuestionAttempt, type StoredGameData } from "@/types/game"
 
 function requireNeon() {
   if (!neon) throw new Error("Neon is not configured.")
@@ -64,14 +64,15 @@ function sessionRow(profileId: string, session: GameSession) {
   return {
     id: session.id,
     learner_profile_id: profileId,
-    level: session.level,
+    level_id: session.level,
+    level: legacyLevelNumber(session.level),
     started_at: session.startedAt,
     ended_at: session.endedAt,
     status: session.status,
     questions_completed: session.questionsCompleted,
     total_questions: normalizeSessionLength(session.totalQuestions, inferredLength),
     app_version: "0.1.0",
-    schema_version: 2,
+    schema_version: 3,
     updated_at: new Date().toISOString(),
   }
 }
@@ -82,7 +83,8 @@ function attemptRow(profileId: string, attempt: QuestionAttempt) {
     learner_profile_id: profileId,
     session_id: attempt.sessionId,
     occurred_at: attempt.timestamp,
-    level: attempt.level,
+    level_id: attempt.level,
+    level: legacyLevelNumber(attempt.level),
     skill: attempt.skill,
     item_key: attempt.itemKey,
     animal: attempt.animal,
@@ -98,8 +100,15 @@ function attemptRow(profileId: string, attempt: QuestionAttempt) {
     legacy_response_ms: Math.max(0, attempt.responseMs ?? 0),
     payload: attempt,
     app_version: "0.1.0",
-    schema_version: 2,
+    schema_version: 3,
   }
+}
+
+function legacyLevelNumber(level: LevelId) {
+  if (level === "make-10") return 1
+  if (level === "teen-numbers") return 2
+  if (level === "bridge-through-10") return 3
+  return null
 }
 
 export async function syncCloudProgress(profileId: string, data: StoredGameData) {
@@ -110,6 +119,7 @@ export async function syncCloudProgress(profileId: string, data: StoredGameData)
     show_maori: data.settings.showMaori,
     question_presentation: data.settings.questionPresentation,
     session_length: data.settings.sessionLength,
+    number_sense_session_length: data.settings.numberSenseSessionLength,
     updated_at: data.settings.updatedAt,
   }
   const currentSettings = await client.from("learner_settings").select("updated_at").eq("learner_profile_id", profileId).maybeSingle()
@@ -132,14 +142,15 @@ export async function syncCloudProgress(profileId: string, data: StoredGameData)
     sessionRowsById.set(sessionId, {
       id: sessionId,
       learner_profile_id: profileId,
-      level: ordered[0].level,
+      level_id: ordered[0].level,
+      level: legacyLevelNumber(ordered[0].level),
       started_at: ordered[0].timestamp,
       ended_at: ordered.at(-1)?.timestamp ?? ordered[0].timestamp,
       status: "incomplete",
       questions_completed: ordered.length,
-      total_questions: data.settings.sessionLength,
+      total_questions: isNumberSenseLevel(ordered[0].level) ? data.settings.numberSenseSessionLength : data.settings.sessionLength,
       app_version: "0.1.0",
-      schema_version: 2,
+      schema_version: 3,
       updated_at: new Date().toISOString(),
     })
   })
@@ -147,14 +158,15 @@ export async function syncCloudProgress(profileId: string, data: StoredGameData)
   if (data.activeSession) sessionRows.push({
     id: data.activeSession.id,
     learner_profile_id: profileId,
-    level: data.activeSession.level,
+    level_id: data.activeSession.level,
+    level: legacyLevelNumber(data.activeSession.level),
     started_at: data.activeSession.startedAt,
     ended_at: null,
     status: "in_progress",
     questions_completed: data.activeSession.questionsCompleted,
-    total_questions: normalizeSessionLength(data.activeSession.totalQuestions, data.settings.sessionLength),
+    total_questions: normalizeSessionLength(data.activeSession.totalQuestions, isNumberSenseLevel(data.activeSession.level) ? data.settings.numberSenseSessionLength : data.settings.sessionLength),
     app_version: "0.1.0",
-    schema_version: 2,
+    schema_version: 3,
     updated_at: new Date().toISOString(),
   })
   if (sessionRows.length > 0) {
@@ -185,19 +197,23 @@ export async function loadCloudProgress(profileId: string, local: StoredGameData
       showEnglish: Boolean(settingsResult.data.show_english),
       showMaori: Boolean(settingsResult.data.show_maori),
       questionPresentation: settingsResult.data.question_presentation,
-      sessionLength: settingsResult.data.session_length,
+      sessionLength: normalizeAdditionSessionLength(settingsResult.data.session_length),
+      numberSenseSessionLength: normalizeNumberSenseSessionLength(settingsResult.data.number_sense_session_length),
       updatedAt: settingsResult.data.updated_at,
     } : initialData.settings,
     sessions: (sessionsResult.data ?? []).map((row) => ({
       id: row.id,
-      level: row.level,
+      level: legacyLevelId(row.level_id ?? row.level) ?? "make-10",
       startedAt: row.started_at,
       endedAt: row.ended_at,
       status: row.status,
       questionsCompleted: row.questions_completed,
       totalQuestions: row.total_questions,
     })),
-    attempts: (attemptsResult.data ?? []).map((row) => row.payload as QuestionAttempt),
+    attempts: (attemptsResult.data ?? []).map((row) => {
+      const payload = row.payload as QuestionAttempt
+      return { ...payload, level: legacyLevelId(payload.level) ?? "make-10" }
+    }),
   }
   return mergeLearningData(local, remote)
 }

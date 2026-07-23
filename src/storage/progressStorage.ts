@@ -1,4 +1,4 @@
-import type { GameSession, SessionLength, StoredGameData } from "@/types/game"
+import { legacyLevelId, type AdditionSessionLength, type GameSession, type NumberSenseSessionLength, type SessionLength, type StoredGameData } from "@/types/game"
 import { answerChoicesForQuestion, itemKey } from "@/game/questionGenerator"
 
 export const LEGACY_STORAGE_KEY = "kararehe-math:data"
@@ -6,7 +6,7 @@ export const GUEST_SCOPE = "guest"
 const STORAGE_PREFIX = "kararehe-math:data:"
 
 export const initialData: StoredGameData = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   appVersion: "0.1.0",
   settings: {
     languagePriority: "english-first",
@@ -14,6 +14,7 @@ export const initialData: StoredGameData = {
     showMaori: true,
     questionPresentation: "numbers",
     sessionLength: 10,
+    numberSenseSessionLength: 8,
     updatedAt: new Date(0).toISOString(),
   },
   sessions: [],
@@ -25,7 +26,7 @@ function isStoredGameData(value: unknown): value is StoredGameData {
   if (!value || typeof value !== "object") return false
   const candidate = value as Partial<StoredGameData> & { schemaVersion?: number }
   const schemaVersion = candidate.schemaVersion as number | undefined
-  return (schemaVersion === 1 || schemaVersion === 2)
+  return (schemaVersion === 1 || schemaVersion === 2 || schemaVersion === 3)
     && Array.isArray(candidate.sessions)
     && Array.isArray(candidate.attempts)
     && typeof candidate.settings === "object"
@@ -40,7 +41,15 @@ export function pendingProfileKey(email: string) {
 }
 
 export function normalizeSessionLength(value: unknown, fallback: SessionLength = 10): SessionLength {
+  return value === 5 || value === 8 || value === 10 || value === 20 || value === 30 ? value : fallback
+}
+
+export function normalizeAdditionSessionLength(value: unknown, fallback: AdditionSessionLength = 10): AdditionSessionLength {
   return value === 10 || value === 20 || value === 30 ? value : fallback
+}
+
+export function normalizeNumberSenseSessionLength(value: unknown, fallback: NumberSenseSessionLength = 8): NumberSenseSessionLength {
+  return value === 5 || value === 8 || value === 10 ? value : fallback
 }
 
 function legacySessionLength(session: GameSession): SessionLength {
@@ -50,18 +59,27 @@ function legacySessionLength(session: GameSession): SessionLength {
 }
 
 function migrateData(parsed: StoredGameData): StoredGameData {
-  const migrated = parsed as StoredGameData
-  migrated.schemaVersion = 2
+  const migrated = parsed as StoredGameData & { schemaVersion: number }
+  migrated.schemaVersion = 3
   migrated.settings.updatedAt ??= new Date(0).toISOString()
-  migrated.settings.sessionLength = normalizeSessionLength(migrated.settings.sessionLength)
+  migrated.settings.sessionLength = normalizeAdditionSessionLength(migrated.settings.sessionLength)
+  migrated.settings.numberSenseSessionLength = normalizeNumberSenseSessionLength(migrated.settings.numberSenseSessionLength)
   migrated.sessions = migrated.sessions.map((session) => ({
     ...session,
+    level: legacyLevelId(session.level) ?? "make-10",
     totalQuestions: normalizeSessionLength(session.totalQuestions, legacySessionLength(session)),
   }))
   migrated.attempts = migrated.attempts.map((attempt) => ({
     ...attempt,
+    level: legacyLevelId(attempt.level) ?? "make-10",
     activeDurationMs: Math.min(300_000, Math.max(0, attempt.activeDurationMs ?? attempt.responseMs ?? 0)),
   }))
+  if (migrated.activeSession) {
+    migrated.activeSession.level = legacyLevelId(migrated.activeSession.level) ?? "make-10"
+    migrated.activeSession.currentQuestion.level = migrated.activeSession.level
+    migrated.activeSession.touchedObjectIndexes ??= []
+    migrated.activeSession.duplicateTouchAttempts ??= 0
+  }
   return migrated
 }
 
@@ -92,7 +110,9 @@ export function loadData(scope = GUEST_SCOPE): StoredGameData {
         parsed.activeSession.currentQuestion.first,
         parsed.activeSession.currentQuestion.second,
       )]
-      if (parsed.activeSession.level === 3) {
+      parsed.activeSession.level = legacyLevelId(parsed.activeSession.level) ?? "make-10"
+      parsed.activeSession.currentQuestion.level = parsed.activeSession.level
+      if (parsed.activeSession.level === "bridge-through-10") {
         const question = parsed.activeSession.currentQuestion
         if (question.skill === "bridge-missing-addend") {
           question.skill = "bridge-total"
