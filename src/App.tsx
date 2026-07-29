@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { getAnimal } from "@/data/animals"
+import { countFeedback } from "@/game/feedback"
 import { generateQuestion, itemKey } from "@/game/questionGenerator"
 import { useActiveLearningTimer } from "@/hooks/useActiveLearningTimer"
 import { animalTerm, numberTerm } from "@/language/bilingualTerms"
@@ -837,7 +838,7 @@ function NumberSenseGameScreen({ active, priority, presentation, onAnswer, onTou
         </CardContent>
       </Card>
       <div className="confirmation-area">
-        {correct && <div className="feedback feedback-good" role="status"><span aria-hidden="true">🌿</span><div><strong>Ka pai! That’s it.</strong><p>{question.level === "compare-quantities" ? question.prompt.replace("?", ".") : `There are ${question.expectedAnswer} ${names.primary}.`}</p></div></div>}
+        {correct && <div className="feedback feedback-good" role="status"><span aria-hidden="true">🌿</span><div><strong>Ka pai! That’s it.</strong><p>{question.level === "compare-quantities" ? question.prompt.replace("?", ".") : countFeedback(question.animal, question.expectedAnswer, priority)}</p></div></div>}
         {correct && <Button size="lg" className="next-button mt-5 w-full sm:mx-auto sm:flex sm:w-56" onClick={onNext}>Next <Play className="size-5 fill-current" /></Button>}
       </div>
     </div>
