@@ -10,7 +10,14 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { getAnimal } from "@/data/animals"
-import { countFeedback } from "@/game/feedback"
+import {
+  animalName,
+  animalsRemainingLabel,
+  bridgeRemainingRetryFeedback,
+  countFeedback,
+  quantityAnimal,
+  teenNumberRetryFeedback,
+} from "@/game/feedback"
 import { generateQuestion, itemKey } from "@/game/questionGenerator"
 import { useActiveLearningTimer } from "@/hooks/useActiveLearningTimer"
 import { animalTerm, numberTerm } from "@/language/bilingualTerms"
@@ -717,6 +724,9 @@ function NumberSenseGameScreen({ active, priority, presentation, onAnswer, onTou
   const question = active.currentQuestion
   const animal = getAnimal(question.animal)
   const names = animalTerm(question.animal, question.first, priority)
+  const singularName = animalName(question.animal, 1, priority)
+  const leftQuantity = question.leftQuantity ?? question.first
+  const rightQuantity = question.rightQuantity ?? question.second
   const correct = active.feedbackState === "correct"
   const revealed = active.feedbackState === "revealed"
   const touched = active.touchedObjectIndexes ?? []
@@ -780,7 +790,7 @@ function NumberSenseGameScreen({ active, priority, presentation, onAnswer, onTou
         </CardHeader>
         <CardContent className="number-sense-content">
           {question.level === "count-objects" && (
-            <div className={`number-object-field ${question.layout === "scattered" ? "number-object-scattered" : "number-object-structured"}`} aria-label={`${question.first} ${names.primary}`}>
+            <div className={`number-object-field ${question.layout === "scattered" ? "number-object-scattered" : "number-object-structured"}`} aria-label={quantityAnimal(question.animal, question.first, priority)}>
               {Array.from({ length: question.first }, (_, index) => (
                 <button
                   type="button"
@@ -788,7 +798,7 @@ function NumberSenseGameScreen({ active, priority, presentation, onAnswer, onTou
                   key={index}
                   onClick={() => onTouchObject(index)}
                   disabled={!question.requiresTouchCount || correct}
-                  aria-label={question.requiresTouchCount ? `${touched.includes(index) ? "Counted" : "Count"} ${names.primary}` : undefined}
+                  aria-label={question.requiresTouchCount ? `${touched.includes(index) ? "Counted" : "Count"} ${singularName}` : undefined}
                 >
                   <span aria-hidden="true">{animal.emoji}</span>
                   {(touched.includes(index) || revealed) && <small aria-hidden="true">{touched.includes(index) ? touched.indexOf(index) + 1 : index + 1}</small>}
@@ -803,19 +813,19 @@ function NumberSenseGameScreen({ active, priority, presentation, onAnswer, onTou
           )}
           {question.level === "compare-quantities" && (
             <div className={`compare-stage ${question.layout === "different-spacing" ? "compare-different-spacing" : ""}`}>
-              <button type="button" className={`compare-group ${correct && question.expectedAnswer === (question.leftQuantity ?? question.first) ? "compare-group-correct" : ""}`} onClick={() => correct && question.expectedAnswer === (question.leftQuantity ?? question.first) ? onNext() : onAnswer(question.leftQuantity ?? question.first)} disabled={question.skill === "compare-same" || (correct && question.expectedAnswer !== (question.leftQuantity ?? question.first))} aria-label={`Left group: ${question.leftQuantity} ${names.primary}`}>
-                <ObjectPattern emoji={animal.emoji} quantity={question.leftQuantity ?? question.first} />
-                {correct && question.expectedAnswer === (question.leftQuantity ?? question.first) && <span className="answer-next-caret" aria-hidden="true"><Play className="size-5 fill-current" /></span>}
+              <button type="button" className={`compare-group ${correct && question.expectedAnswer === leftQuantity ? "compare-group-correct" : ""}`} onClick={() => correct && question.expectedAnswer === leftQuantity ? onNext() : onAnswer(leftQuantity)} disabled={question.skill === "compare-same" || (correct && question.expectedAnswer !== leftQuantity)} aria-label={`Left group: ${quantityAnimal(question.animal, leftQuantity, priority)}`}>
+                <ObjectPattern emoji={animal.emoji} quantity={leftQuantity} />
+                {correct && question.expectedAnswer === leftQuantity && <span className="answer-next-caret" aria-hidden="true"><Play className="size-5 fill-current" /></span>}
               </button>
               <span className="compare-divider" aria-hidden="true">or</span>
-              <button type="button" className={`compare-group ${correct && question.expectedAnswer === (question.rightQuantity ?? question.second) ? "compare-group-correct" : ""}`} onClick={() => correct && question.expectedAnswer === (question.rightQuantity ?? question.second) ? onNext() : onAnswer(question.rightQuantity ?? question.second)} disabled={question.skill === "compare-same" || (correct && question.expectedAnswer !== (question.rightQuantity ?? question.second))} aria-label={`Right group: ${question.rightQuantity} ${names.primary}`}>
-                <ObjectPattern emoji={animal.emoji} quantity={question.rightQuantity ?? question.second} />
-                {correct && question.expectedAnswer === (question.rightQuantity ?? question.second) && <span className="answer-next-caret" aria-hidden="true"><Play className="size-5 fill-current" /></span>}
+              <button type="button" className={`compare-group ${correct && question.expectedAnswer === rightQuantity ? "compare-group-correct" : ""}`} onClick={() => correct && question.expectedAnswer === rightQuantity ? onNext() : onAnswer(rightQuantity)} disabled={question.skill === "compare-same" || (correct && question.expectedAnswer !== rightQuantity)} aria-label={`Right group: ${quantityAnimal(question.animal, rightQuantity, priority)}`}>
+                <ObjectPattern emoji={animal.emoji} quantity={rightQuantity} />
+                {correct && question.expectedAnswer === rightQuantity && <span className="answer-next-caret" aria-hidden="true"><Play className="size-5 fill-current" /></span>}
               </button>
             </div>
           )}
 
-          {question.requiresTouchCount && !countingReady && <p className="number-sense-instruction">Touch each {names.primary} once. The answer choices will appear when every one has been counted.</p>}
+          {question.requiresTouchCount && !countingReady && <p className="number-sense-instruction">Touch each {singularName} once. The answer choices will appear when every one has been counted.</p>}
           {question.requiresTouchCount && countingReady && !correct && <p className="number-sense-instruction">You counted {touched.length}. Now choose the number.</p>}
 
           {question.level === "compare-quantities" && question.skill !== "compare-same" ? (
@@ -1024,16 +1034,18 @@ function promptWithAnimal(question: GameQuestion, animal: ReturnType<typeof anim
 
 function QuestionVisual({ question, filled, added, priority, bridgeStage }: { question: GameQuestion; filled: number; added: number; priority: LanguagePriority; bridgeStage: "partition" | "sum" }) {
   const animal = getAnimal(question.animal)
-  const names = animalTerm(question.animal, question.first + question.second, priority)
+  const animalQuantity = (quantity: number, displayedQuantity = String(quantity)) =>
+    quantityAnimal(question.animal, quantity, priority, displayedQuantity)
+  const animalFor = (quantity: number) => animalName(question.animal, quantity, priority)
   if (question.level === "bridge-through-10") {
     const toTen = 10 - question.first
     const remainder = question.second - toTen
     if (bridgeStage === "sum") {
       return (
         <div className="bridge-static bridge-completed">
-          <TenFrame animal={question.animal} filled={question.first} added={toTen} label={`A full ten-frame with ${question.first} original and ${toTen} moved ${names.primary}.`} />
+          <TenFrame animal={question.animal} filled={question.first} added={toTen} label={`A full ten-frame with ${question.first} original and ${toTen} moved ${animalFor(toTen)}.`} />
           <span className="bridge-plus" aria-hidden="true">+</span>
-          <div className="bridge-extra-animals" role="img" aria-label={`${remainder} ${names.primary} remain after making ten`}>
+          <div className="bridge-extra-animals" role="img" aria-label={animalsRemainingLabel(question.animal, remainder, priority)}>
             {Array.from({ length: remainder }, (_, index) => <span key={index}>{animal.emoji}</span>)}
           </div>
         </div>
@@ -1042,9 +1054,9 @@ function QuestionVisual({ question, filled, added, priority, bridgeStage }: { qu
     if (question.skill !== "bridge-missing-addend") {
       return (
         <div className="bridge-static bridge-partition">
-          <TenFrame animal={question.animal} filled={question.first} label={`A ten-frame with ${question.first} ${names.primary} and ${10 - question.first} empty spaces.`} />
-          <span className="bridge-arrow" role="img" aria-label={`Move some of the ${question.second} extra ${names.primary} into the ten-frame`}>←</span>
-          <div className="bridge-extra-animals" role="img" aria-label={`${question.second} extra ${names.primary}`}>
+          <TenFrame animal={question.animal} filled={question.first} label={`A ten-frame with ${animalQuantity(question.first)} and ${10 - question.first} empty spaces.`} />
+          <span className="bridge-arrow" role="img" aria-label={`Move some of the ${question.second} extra ${animalFor(question.second)} into the ten-frame`}>←</span>
+          <div className="bridge-extra-animals" role="img" aria-label={`${question.second} extra ${animalFor(question.second)}`}>
             {Array.from({ length: question.second }, (_, index) => <span key={index}>{animal.emoji}</span>)}
           </div>
         </div>
@@ -1052,7 +1064,7 @@ function QuestionVisual({ question, filled, added, priority, bridgeStage }: { qu
     }
     return (
       <div className="mx-auto max-w-md">
-        <TenFrame animal={question.animal} filled={question.first} label={`A ten-frame with ${question.first} ${names.primary} and ${10 - question.first} empty spaces.`} />
+        <TenFrame animal={question.animal} filled={question.first} label={`A ten-frame with ${animalQuantity(question.first)} and ${10 - question.first} empty spaces.`} />
       </div>
     )
   }
@@ -1062,7 +1074,7 @@ function QuestionVisual({ question, filled, added, priority, bridgeStage }: { qu
         <div
           className="addition-groups"
           role="img"
-          aria-label={`${question.first} ${names.primary} plus ${question.second} ${names.primary}`}
+          aria-label={`${animalQuantity(question.first)} plus ${animalQuantity(question.second)}`}
         >
           <EmojiGroup emoji={animal.emoji} quantity={question.first} />
           <span className="addition-groups-plus" aria-hidden="true">+</span>
@@ -1074,9 +1086,9 @@ function QuestionVisual({ question, filled, added, priority, bridgeStage }: { qu
     const overflow = Math.max(0, filled + visibleAdded - 10)
     return (
       <div className="mx-auto max-w-lg">
-        <TenFrame animal={question.animal} filled={filled} added={visibleAdded} label={`A ten-frame with ${Math.min(10, filled + visibleAdded)} ${names.primary} and ${Math.max(0, 10 - filled - visibleAdded)} empty spaces.`} />
+        <TenFrame animal={question.animal} filled={filled} added={visibleAdded} label={`A ten-frame with ${animalQuantity(Math.min(10, filled + visibleAdded))} and ${Math.max(0, 10 - filled - visibleAdded)} empty spaces.`} />
         {overflow > 0 && (
-          <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-amber-500/60 bg-amber-50 p-3" aria-label={`${overflow} ${names.primary} outside the full ten-frame`}>
+          <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-amber-500/60 bg-amber-50 p-3" aria-label={`${animalQuantity(overflow)} outside the full ten-frame`}>
             <span className="text-sm font-bold text-amber-900">Too many for the frame:</span>
             {Array.from({ length: overflow }, (_, index) => <span key={index} className="text-3xl" aria-hidden="true">{getAnimal(question.animal).emoji}</span>)}
           </div>
@@ -1089,9 +1101,9 @@ function QuestionVisual({ question, filled, added, priority, bridgeStage }: { qu
     <div className="teen-visual mx-auto grid max-w-2xl items-center gap-5 sm:grid-cols-[1fr_auto]">
       <div>
         <p className="mb-2 text-center text-sm font-bold text-muted-foreground">one full ten · kotahi tekau</p>
-        <TenFrame animal={question.animal} filled={10} label={`A full ten-frame with ten ${names.primary}.`} />
+        <TenFrame animal={question.animal} filled={10} label={`A full ten-frame with ${animalQuantity(10, "ten")}.`} />
       </div>
-      <div className={`loose-group ${missingOnes ? "loose-group-missing" : ""}`} role="img" aria-label={missingOnes ? `Loose ${names.primary} to count` : `${question.second} extra ${names.primary}`}>
+      <div className={`loose-group ${missingOnes ? "loose-group-missing" : ""}`} role="img" aria-label={missingOnes ? `Loose ${animalFor(question.second)} to count` : `${question.second} extra ${animalFor(question.second)}`}>
         {Array.from({ length: question.second }, (_, index) => <span key={index} aria-hidden="true">{animal.emoji}</span>)}
         {!missingOnes && <div className="col-span-full mt-1 text-center text-sm"><BilingualTerm term={numberTerm(question.second, priority)} /></div>}
       </div>
@@ -1158,7 +1170,6 @@ function Feedback({ active, priority, presentation }: { active: ActiveSession; p
       : "Choose the answer that feels right."
     return <p className="mt-5 min-h-14 text-center text-muted-foreground">{instruction}</p>
   }
-  const animal = animalTerm(question.animal, question.expectedAnswer, priority)
   if (active.feedbackState === "correct") {
     const equation = question.level === "bridge-through-10" && question.skill !== "bridge-missing-addend"
       ? `${question.first} + ${question.second} = ${question.first + question.second}`
@@ -1190,11 +1201,23 @@ function Feedback({ active, priority, presentation }: { active: ActiveSession; p
       <div><strong>Have another look.</strong><p>{question.level === "make-10"
         ? `That makes ${questionNumber(total, presentation)}. We need ${question.skill === "bond-complete" ? questionNumber(10, presentation) : "a full ten"}.`
         : question.level === "teen-numbers"
-          ? `Here is one group of ${questionNumber(10, presentation)} and ${questionNumber(question.second, presentation)} more ${animal.primary}.`
+          ? teenNumberRetryFeedback(
+              question.animal,
+              question.second,
+              priority,
+              questionNumber(10, presentation),
+              questionNumber(question.second, presentation),
+            )
           : active.bridgeStage === "sum"
             ? question.skill === "bridge-missing-addend"
               ? `You used ${questionNumber(10 - question.first, presentation)} to make ${questionNumber(10, presentation)}, then ${questionNumber(question.second - (10 - question.first), presentation)} more. How many were added altogether?`
-              : `You made ${questionNumber(10, presentation)}. Now add the ${questionNumber(question.second - (10 - question.first), presentation)} remaining ${animal.primary}.`
+              : bridgeRemainingRetryFeedback(
+                  question.animal,
+                  question.second - (10 - question.first),
+                  priority,
+                  questionNumber(10, presentation),
+                  questionNumber(question.second - (10 - question.first), presentation),
+                )
             : `${questionNumber(question.first, presentation)} needs ${questionNumber(10 - question.first, presentation)} more to reach ${questionNumber(10, presentation)} first.`}</p></div>
     </div>
   )
